@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -19,14 +19,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 // console.c
 
+#ifdef NeXT
+#include <libc.h>
+#endif
 #ifndef _MSC_VER
 #include <unistd.h>
 #endif
-
-#ifdef _WIN32
-#include <io.h>
-#endif
-
 #include <fcntl.h>
 #include "quakedef.h"
 
@@ -45,25 +43,24 @@ int			con_x;				// offset in current line for next print
 char		*con_text=0;
 
 cvar_t		con_notifytime = {"con_notifytime","3"};		//seconds
-cvar_t		_con_notifylines = {"con_notifylines","4"};
 
 #define	NUM_CON_TIMES 4
 float		con_times[NUM_CON_TIMES];	// realtime time the line was generated
 								// for transparent notify lines
 
 int			con_vislines;
-int			con_notifylines;		// scan lines to clear for notify lines
 
 qboolean	con_debuglog;
 
 #define		MAXCMDLINE	256
-
 extern	char	key_lines[32][MAXCMDLINE];
 extern	int		edit_line;
 extern	int		key_linepos;
+		
 
-qboolean	con_initialized = false;
+qboolean	con_initialized;
 
+int			con_notifylines;		// scan lines to clear for notify lines
 
 extern void M_Menu_Main_f (void);
 
@@ -94,7 +91,7 @@ void Con_ToggleConsole_f (void)
 	}
 	else
 		key_dest = key_console;
-
+	
 	SCR_EndLoadingPlaque ();
 	memset (con_times, 0, sizeof(con_times));
 }
@@ -107,58 +104,10 @@ Con_Clear_f
 void Con_Clear_f (void)
 {
 	if (con_text)
-		memset (con_text, ' ', CON_TEXTSIZE);
+		Q_memset (con_text, ' ', CON_TEXTSIZE);
 }
 
-#ifdef SUPPORTS_CLIPBOARD
-/*
-================
-Con_Copy_f -- Baker -- adapted from Con_Dump
-================
-*/
-void Con_Copy_f (void)
-{
-	char	outstring[CON_TEXTSIZE]="";
-	int		l, x;
-	char	*line;
-	char	buffer[1024];
-
-	// skip initial empty lines
-	for (l = con_current - con_totallines + 1 ; l <= con_current ; l++)
-	{
-		line = con_text + (l%con_totallines)*con_linewidth;
-		for (x=0 ; x<con_linewidth ; x++)
-			if (line[x] != ' ')
-				break;
-		if (x != con_linewidth)
-			break;
-	}
-
-	// write the remaining lines
-	buffer[con_linewidth] = 0;
-	for ( ; l <= con_current ; l++)
-	{
-		line = con_text + (l%con_totallines)*con_linewidth;
-		strncpy (buffer, line, con_linewidth);
-		for (x=con_linewidth-1 ; x>=0 ; x--)
-		{
-			if (buffer[x] == ' ')
-				buffer[x] = 0;
-			else
-				break;
-		}
-		for (x=0; buffer[x]; x++)
-			buffer[x] &= 0x7f;
-
-		strlcat (outstring, va("%s\r\n", buffer), sizeof(outstring));
-
-	}
-
-	Sys_CopyToClipboard(outstring);
-	Con_Printf ("Copied console to clipboard\n");
-}
-#endif
-
+						
 /*
 ================
 Con_ClearNotify
@@ -167,12 +116,12 @@ Con_ClearNotify
 void Con_ClearNotify (void)
 {
 	int		i;
-
+	
 	for (i=0 ; i<NUM_CON_TIMES ; i++)
 		con_times[i] = 0;
 }
 
-
+						
 /*
 ================
 Con_MessageMode_f
@@ -186,7 +135,7 @@ void Con_MessageMode_f (void)
 	team_message = false;
 }
 
-
+						
 /*
 ================
 Con_MessageMode2_f
@@ -198,7 +147,7 @@ void Con_MessageMode2_f (void)
 	team_message = true;
 }
 
-
+						
 /*
 ================
 Con_CheckResize
@@ -221,7 +170,7 @@ void Con_CheckResize (void)
 		width = 38;
 		con_linewidth = width;
 		con_totallines = CON_TEXTSIZE / con_linewidth;
-		memset (con_text, ' ', CON_TEXTSIZE);
+		Q_memset (con_text, ' ', CON_TEXTSIZE);
 	}
 	else
 	{
@@ -235,18 +184,20 @@ void Con_CheckResize (void)
 			numlines = con_totallines;
 
 		numchars = oldwidth;
-
+	
 		if (con_linewidth < numchars)
 			numchars = con_linewidth;
 
-		memcpy (tbuf, con_text, CON_TEXTSIZE);
-		memset (con_text, ' ', CON_TEXTSIZE);
+		Q_memcpy (tbuf, con_text, CON_TEXTSIZE);
+		Q_memset (con_text, ' ', CON_TEXTSIZE);
 
 		for (i=0 ; i<numlines ; i++)
 		{
 			for (j=0 ; j<numchars ; j++)
 			{
-				con_text[(con_totallines - 1 - i) * con_linewidth + j] = tbuf[((con_current - i + oldtotallines) % oldtotallines) * oldwidth + j];
+				con_text[(con_totallines - 1 - i) * con_linewidth + j] =
+						tbuf[((con_current - i + oldtotallines) %
+							  oldtotallines) * oldwidth + j];
 			}
 		}
 
@@ -275,29 +226,28 @@ void Con_Init (void)
 	{
 		if (strlen (com_gamedir) < (MAXGAMEDIRLEN - strlen (t2)))
 		{
-			snprintf(temp, sizeof(temp),  "%s%s", com_gamedir, t2);
+			sprintf (temp, "%s%s", com_gamedir, t2);
 			unlink (temp);
 		}
 	}
 
 	con_text = Hunk_AllocName (CON_TEXTSIZE, "context");
-	memset (con_text, ' ', CON_TEXTSIZE);
+	Q_memset (con_text, ' ', CON_TEXTSIZE);
 	con_linewidth = -1;
 	Con_CheckResize ();
+	
+	Con_Printf ("Console initialized.\n");
 
+//
 // register our commands
-	Cvar_RegisterVariable (&con_notifytime, NULL);
-	Cvar_RegisterVariable (&_con_notifylines, NULL);
+//
+	Cvar_RegisterVariable (&con_notifytime);
 
 	Cmd_AddCommand ("toggleconsole", Con_ToggleConsole_f);
 	Cmd_AddCommand ("messagemode", Con_MessageMode_f);
 	Cmd_AddCommand ("messagemode2", Con_MessageMode2_f);
 	Cmd_AddCommand ("clear", Con_Clear_f);
-#ifdef SUPPORTS_CLIPBOARD
-	Cmd_AddCommand ("copy", Con_Copy_f); // Baker 399.m - copy console to clipboard
-#endif
 	con_initialized = true;
-	Con_Printf ("Console initialized\n");
 }
 
 
@@ -310,7 +260,8 @@ void Con_Linefeed (void)
 {
 	con_x = 0;
 	con_current++;
-	memset (&con_text[(con_current%con_totallines)*con_linewidth], ' ', con_linewidth);
+	Q_memset (&con_text[(con_current%con_totallines)*con_linewidth]
+	, ' ', con_linewidth);
 }
 
 /*
@@ -324,9 +275,11 @@ If no console is visible, the notify window will pop up.
 */
 void Con_Print (char *txt)
 {
-	int		y, c, l, mask;
+	int		y;
+	int		c, l;
 	static int	cr;
-
+	int		mask;
+	
 	con_backscroll = 0;
 
 	if (txt[0] == 1)
@@ -342,9 +295,8 @@ void Con_Print (char *txt)
 		txt++;
 	}
 	else
-	{
 		mask = 0;
-	}
+
 
 	while ( (c = *txt) )
 	{
@@ -365,6 +317,7 @@ void Con_Print (char *txt)
 			cr = false;
 		}
 
+		
 		if (!con_x)
 		{
 			Con_Linefeed ();
@@ -392,7 +345,7 @@ void Con_Print (char *txt)
 				con_x = 0;
 			break;
 		}
-
+		
 	}
 }
 
@@ -404,12 +357,12 @@ Con_DebugLog
 */
 void Con_DebugLog(char *file, char *fmt, ...)
 {
-    va_list argptr;
+    va_list argptr; 
     static char data[1024];
     int fd;
-
+    
     va_start(argptr, fmt);
-    vsnprintf(data, sizeof(data), fmt, argptr);
+    vsprintf(data, fmt, argptr);
     va_end(argptr);
     fd = open(file, O_WRONLY | O_CREAT | O_APPEND, 0666);
     write(fd, data, strlen(data));
@@ -431,11 +384,11 @@ void Con_Printf (char *fmt, ...)
 	va_list		argptr;
 	char		msg[MAXPRINTMSG];
 	static qboolean	inupdate;
-
+	
 	va_start (argptr,fmt);
-	vsnprintf(msg, sizeof(msg), fmt,argptr);
+	vsprintf (msg,fmt,argptr);
 	va_end (argptr);
-
+	
 // also echo to debugging console
 	Sys_Printf ("%s", msg);	// also echo to debugging console
 
@@ -445,13 +398,13 @@ void Con_Printf (char *fmt, ...)
 
 	if (!con_initialized)
 		return;
-
+		
 	if (cls.state == ca_dedicated)
 		return;		// no graphics mode
 
 // write it to the scrollable buffer
 	Con_Print (msg);
-
+	
 // update the screen if the console is displayed
 	if (cls.signon != SIGNONS && !scr_disabled_for_loading )
 	{
@@ -464,6 +417,28 @@ void Con_Printf (char *fmt, ...)
 			inupdate = false;
 		}
 	}
+}
+
+/*
+================
+Con_DPrintf
+
+A Con_Printf that only shows up if the "developer" cvar is set
+================
+*/
+void Con_DPrintf (char *fmt, ...)
+{
+	va_list		argptr;
+	char		msg[MAXPRINTMSG];
+		
+	if (!developer.value)
+		return;			// don't confuse non-developers with techie stuff...
+
+	va_start (argptr,fmt);
+	vsprintf (msg,fmt,argptr);
+	va_end (argptr);
+	
+	Con_Printf ("%s", msg);
 }
 
 
@@ -479,9 +454,9 @@ void Con_SafePrintf (char *fmt, ...)
 	va_list		argptr;
 	char		msg[1024];
 	int			temp;
-
+		
 	va_start (argptr,fmt);
-	vsnprintf(msg, sizeof(msg), fmt,argptr);
+	vsprintf (msg,fmt,argptr);
 	va_end (argptr);
 
 	temp = scr_disabled_for_loading;
@@ -492,37 +467,13 @@ void Con_SafePrintf (char *fmt, ...)
 
 
 /*
-================
-Con_DPrintf
-
-A Con_Printf that only shows up if the "developer" cvar is set
-================
-*/
-void Con_DPrintf (char *fmt, ...)
-{
-	va_list		argptr;
-	char		msg[MAXPRINTMSG];
-
-	if (!developer.value)
-		return;			// don't confuse non-developers with techie stuff...
-
-	va_start (argptr,fmt);
-	vsnprintf(msg, sizeof(msg), fmt,argptr);
-	va_end (argptr);
-
-	Con_Printf ("%s", msg);
-}
-
-
-
-
-/*
 ==============================================================================
 
 DRAWING
 
 ==============================================================================
 */
+
 
 /*
 ================
@@ -541,18 +492,18 @@ void Con_DrawInput (void)
 		return;		// don't draw anything
 
 	text = key_lines[edit_line];
-
+	
 // add the cursor frame
 	text[key_linepos] = 10+((int)(realtime*con_cursorspeed)&1);
-
+	
 // fill out remainder with spaces
 	for (i=key_linepos+1 ; i< con_linewidth ; i++)
 		text[i] = ' ';
-
+		
 //	prestep if horizontally scrolling
 	if (key_linepos >= con_linewidth)
 		text += 1 + key_linepos - con_linewidth;
-
+		
 // draw it
 	y = con_vislines-16;
 
@@ -573,15 +524,14 @@ Draws the last few lines of output transparently over the game top
 */
 void Con_DrawNotify (void)
 {
-	int		x, v, i, maxlines;
+	int		x, v;
 	char	*text;
+	int		i;
 	float	time;
 	extern char chat_buffer[];
 
-	maxlines = bound(0, _con_notifylines.value, NUM_CON_TIMES);
-
 	v = 0;
-	for (i= con_current-maxlines+1 ; i<=con_current ; i++)
+	for (i= con_current-NUM_CON_TIMES+1 ; i<=con_current ; i++)
 	{
 		if (i < 0)
 			continue;
@@ -592,7 +542,7 @@ void Con_DrawNotify (void)
 		if (time > con_notifytime.value)
 			continue;
 		text = con_text + (i % con_totallines)*con_linewidth;
-
+		
 		clearnotify = 0;
 		scr_copytop = 1;
 
@@ -602,13 +552,14 @@ void Con_DrawNotify (void)
 		v += 8;
 	}
 
+
 	if (key_dest == key_message)
 	{
 		clearnotify = 0;
 		scr_copytop = 1;
-
+	
 		x = 0;
-
+		
 		Draw_String (8, v, "say:");
 		while(chat_buffer[x])
 		{
@@ -618,7 +569,7 @@ void Con_DrawNotify (void)
 		Draw_Character ( (x+5)<<3, v, 10+((int)(realtime*con_cursorspeed)&1));
 		v += 8;
 	}
-
+	
 	if (v > con_notifylines)
 		con_notifylines = v;
 }
@@ -633,9 +584,11 @@ The typing input line at the bottom should only be drawn if typing is allowed
 */
 void Con_DrawConsole (int lines, qboolean drawinput)
 {
-	int				i, j, x, y, rows;
+	int				i, x, y;
+	int				rows;
 	char			*text;
-
+	int				j;
+	
 	if (lines <= 0)
 		return;
 
@@ -662,15 +615,15 @@ void Con_DrawConsole (int lines, qboolean drawinput)
 // draw the input prompt, user text, and cursor if desired
 	if (drawinput)
 		Con_DrawInput ();
-
-	Con_DrawOSK();
+		
+	Con_DrawOSK();	
 }
 
 static qboolean	scr_osk_active = false;
 
 
 void Con_SetOSKActive(qboolean active) {
-	scr_osk_active = active;
+	scr_osk_active = active;	
 }
 
 qboolean Con_isSetOSKActive(void) {
@@ -703,11 +656,12 @@ void Con_NotifyBox (char *text)
 	key_count = -2;		// wait for a key down and up
 	key_dest = key_console;
 
-	do {
-		t1 = Sys_DoubleTime ();
+	do
+	{
+		t1 = Sys_FloatTime ();
 		SCR_UpdateScreen ();
 		Sys_SendKeyEvents ();
-		t2 = Sys_DoubleTime ();
+		t2 = Sys_FloatTime ();
 		realtime += t2-t1;		// make the cursor blink
 	} while (key_count < 0);
 

@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -17,12 +17,8 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
-// cl_demo.c
 
 #include "quakedef.h"
-#ifdef SUPPORTS_AVI_CAPTURE
-#include "movie.h"
-#endif
 
 void CL_FinishTimeDemo (void);
 
@@ -58,10 +54,6 @@ void CL_StopPlayback (void)
 
 	if (cls.timedemo)
 		CL_FinishTimeDemo ();
-
-#ifdef SUPPORTS_AVI_CAPTURE
-	Movie_StopPlayback ();
-#endif
 }
 
 /*
@@ -73,7 +65,8 @@ Dumps the current net message, prefixed by the length and view angles
 */
 void CL_WriteDemoMessage (void)
 {
-	int		i, len;
+	int		len;
+	int		i;
 	float	f;
 
 	len = LittleLong (net_message.cursize);
@@ -97,19 +90,16 @@ int CL_GetMessage (void)
 {
 	int		r, i;
 	float	f;
-
-	if (cl.paused & 2)		// by joe: pause during demo
-		return 0;
-
+	
 	if	(cls.demoplayback)
 	{
-	// decide if it is time to grab the next message
-		if (cls.signon == SIGNONS)	// always grab until fully connected
+	// decide if it is time to grab the next message		
+		if (cls.signon == SIGNONS)	// allways grab until fully connected
 		{
 			if (cls.timedemo)
 			{
 				if (host_framecount == cls.td_lastframe)
-					return 0;		// already read this frame's message
+					return 0;		// allready read this frame's message
 				cls.td_lastframe = host_framecount;
 			// if this is the second frame, grab the real td_starttime
 			// so the bogus time on the first frame doesn't count
@@ -121,7 +111,7 @@ int CL_GetMessage (void)
 					return 0;		// don't need another message yet
 			}
 		}
-
+		
 	// get the next message
 		Sys_FileRead(cls.demofile, &net_message.cursize, 4);
 		VectorCopy (cl.mviewangles[0], cl.mviewangles[1]);
@@ -130,7 +120,7 @@ int CL_GetMessage (void)
 			r = Sys_FileRead(cls.demofile, &f, 4) / 4;
 			cl.mviewangles[0][i] = LittleFloat (f);
 		}
-
+		
 		net_message.cursize = LittleLong (net_message.cursize);
 		if (net_message.cursize > MAX_MSGLEN)
 			Sys_Error ("Demo message (0x%08x) > MAX_MSGLEN (%d)", net_message.cursize, MAX_MSGLEN);
@@ -140,17 +130,17 @@ int CL_GetMessage (void)
 			CL_StopPlayback ();
 			return 0;
 		}
-
+	
 		return 1;
 	}
 
 	while (1)
 	{
 		r = NET_GetMessage (cls.netcon);
-
+		
 		if (r != 1 && r != 2)
 			return r;
-
+	
 	// discard nop keepalive message
 		if (net_message.cursize == 1 && net_message.data[0] == svc_nop)
 			Con_Printf ("<-- server to client keepalive\n");
@@ -160,7 +150,7 @@ int CL_GetMessage (void)
 
 	if (cls.demorecording)
 		CL_WriteDemoMessage ();
-
+	
 	return r;
 }
 
@@ -179,7 +169,7 @@ void CL_Stop_f (void)
 
 	if (!cls.demorecording)
 	{
-		Con_Printf ("Not recording a demo\n");
+		Con_Printf ("Not recording a demo.\n");
 		return;
 	}
 
@@ -202,11 +192,11 @@ CL_Record_f
 record <demoname> <map> [cd track]
 ====================
 */
-
 void CL_Record_f (void)
 {
-	int		c, track;
+	int		c;
 	char	name[MAX_OSPATH];
+	int		track;
 	char	forcetrack[16];
 
 	if (cmd_source != src_command)
@@ -238,18 +228,20 @@ void CL_Record_f (void)
 		Con_Printf ("Forcing CD track to %i\n", cls.forcetrack);
 	}
 	else
-	{
-		track = -1;
-	}
+		track = -1;	
 
-	snprintf(name, sizeof(name), "%s/%s", com_gamedir, Cmd_Argv(1));
-
+	sprintf (name, "%s/%s", com_gamedir, Cmd_Argv(1));
+	
+//
 // start the map up
+//
 	if (c > 2)
 		Cmd_ExecuteString ( va("map %s", Cmd_Argv(2)), src_command);
-
+	
+//
 // open the demo file
-	COM_ForceExtension (name, ".dem");
+//
+	COM_DefaultExtension (name, ".dem");
 
 	Con_Printf ("recording to %s.\n", name);
 	cls.demofile = Sys_FileOpenWrite(name);
@@ -260,9 +252,9 @@ void CL_Record_f (void)
 	}
 
 	cls.forcetrack = track;
-	snprintf(forcetrack, sizeof(forcetrack), "%i\n", cls.forcetrack);
+	sprintf(forcetrack, "%i\n", cls.forcetrack);
 	Sys_FileWrite(cls.demofile, forcetrack, strlen(forcetrack));
-
+	
 	cls.demorecording = true;
 }
 
@@ -297,14 +289,18 @@ void CL_PlayDemo_f (void)
 
 	if (Cmd_Argc() != 2)
 	{
-		Con_Printf ("playdemo <demoname> : plays a demo\n");
+		Con_Printf ("play <demoname> : plays a demo\n");
 		return;
 	}
 
+//
 // disconnect from server
+//
 	CL_Disconnect ();
-
+	
+//
 // open the demo file
+//
 	strcpy (name, Cmd_Argv(1));
 	COM_DefaultExtension (name, ".dem");
 
@@ -336,15 +332,16 @@ void CL_PlayDemo_f (void)
 /*
 ====================
 CL_FinishTimeDemo
+
 ====================
 */
 void CL_FinishTimeDemo (void)
 {
 	int		frames;
 	double	time;
-
-	cls.timedemo = false;
-
+	
+	cls.timedemo = false; 
+	
 // the first frame didn't count
 	frames = (host_framecount - cls.td_startframe) - 1;
 	time = realtime - cls.td_starttime;
@@ -372,11 +369,12 @@ void CL_TimeDemo_f (void)
 	}
 
 	CL_PlayDemo_f ();
-
+	
 // cls.td_starttime will be grabbed at the second frame of the demo, so
 // all the loading time doesn't get counted
-
+	
 	cls.timedemo = true;
 	cls.td_startframe = host_framecount;
 	cls.td_lastframe = -1;		// get a new message this frame
 }
+

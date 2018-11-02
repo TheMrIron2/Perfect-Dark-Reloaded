@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -31,7 +31,7 @@ namespace quake
 	{
 		// A map from button mask to Quake key.
 		static const unsigned int	buttonCount	= sizeof(unsigned int) * 8;
-		typedef int	ButtonToKeyMap[buttonCount];
+        typedef int	ButtonToKeyMap[buttonCount];
 		static ButtonToKeyMap		buttonToGameKeyMap;
 		static ButtonToKeyMap		buttonToConsoleKeyMap;
 		static ButtonToKeyMap		buttonToMessageKeyMap;
@@ -86,15 +86,10 @@ extern "C" int bind_grab;
 using namespace quake;
 using namespace quake::input;
 
-extern cvar_t cl_yawspeed;
-extern cvar_t cl_pitchspeed;
-
-extern cvar_t in_freelook_analog;
 extern cvar_t in_analog_strafe;
-
 extern cvar_t in_x_axis_adjust;
 extern cvar_t in_y_axis_adjust;
-extern cvar_t scr_fov;
+extern cvar_t in_mlook; //Heffo - mlook cvar
 
 void IN_Init (void)
 {
@@ -103,14 +98,16 @@ void IN_Init (void)
 	sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
 
 	// Japanese users would prefer to have X as cancel and O as OK.
-	unsigned int	okButton		= PSP_CTRL_CROSS;
-	unsigned int	cancelButton	= PSP_CTRL_CIRCLE;
+   	//unsigned int okButton		= PSP_CTRL_CIRCLE;
+	//unsigned int cancelButton	= PSP_CTRL_CROSS;
+	unsigned int okButton		= PSP_CTRL_CROSS;
+	unsigned int cancelButton	= PSP_CTRL_CIRCLE;
+
 
 	// Build the button to Quake key maps.
 	// Common keys:
-	buttonToGameKeyMap[buttonMaskToShift(PSP_CTRL_SELECT)]	= '~';
+    buttonToGameKeyMap[buttonMaskToShift(PSP_CTRL_SELECT)]	= '~';
 	buttonToGameKeyMap[buttonMaskToShift(PSP_CTRL_START)]	= K_ESCAPE;
-
 	buttonToGameKeyMap[buttonMaskToShift(PSP_CTRL_UP)]		= K_UPARROW;
 	buttonToGameKeyMap[buttonMaskToShift(PSP_CTRL_RIGHT)]	= K_RIGHTARROW;
 	buttonToGameKeyMap[buttonMaskToShift(PSP_CTRL_DOWN)]	= K_DOWNARROW;
@@ -149,6 +146,7 @@ void IN_Init (void)
 
 void IN_Shutdown (void)
 {
+
 }
 
 void IN_Commands (void)
@@ -252,6 +250,7 @@ void IN_Commands (void)
 	{
 		// Has the button changed?
 		const unsigned int buttonMask = 1 << button;
+
 		if (deltaPad.Buttons & buttonMask)
 		{
 			// Is the button in the map?
@@ -272,22 +271,22 @@ void IN_Commands (void)
 float IN_CalcInput(int axis, float speed, float tolerance, float acceleration) {
 
 	float value = ((float) axis / 128.0f) - 1.0f;
-
+	
 	if (value == 0.0f) {
 		return 0.0f;
 	}
-
+	
 	float abs_value = fabs(value);
-
+	
 	if (abs_value < tolerance) {
 		return 0.0f;
 	}
-
+	
 	abs_value -= tolerance;
 	abs_value /= (1.0f - tolerance);
 	abs_value = powf(abs_value, acceleration);
 	abs_value *= speed;
-
+	
 	if (value < 0.0f) {
 		value = -abs_value;
 	} else {
@@ -299,58 +298,14 @@ float IN_CalcInput(int axis, float speed, float tolerance, float acceleration) {
 void IN_Move (usercmd_t *cmd)
 {
 	unsigned char analog_strafe = 0;
-
-	int   x_adjust;
-	int   y_adjust;
-	float speed;
-
 	// Don't let the pitch drift back to centre if analog nub look is on.
-	if (in_freelook_analog.value)
-	{
-        Cbuf_AddText("+mlook\n");
+	if (in_mlook.value)
 		V_StopPitchDrift();
-    }
-	else
-    {
-        Cbuf_AddText("-mlook\n");
-        if (in_analog_strafe.value || (in_strafe.state & 1))
+	else {	
+		if (in_analog_strafe.value || (in_strafe.state & 1))	{
 			analog_strafe = 1;
-	}
-
-	if(kurok)
-	{
-		if(scr_fov.value <= 25)
-		{
-			x_adjust = in_x_axis_adjust.value / 4;
-			y_adjust = in_y_axis_adjust.value / 4;
-			speed = sensitivity.value / 4;
-		}
-		else if(scr_fov.value <= 50)
-		{
-			x_adjust = in_x_axis_adjust.value / 3;
-			y_adjust = in_y_axis_adjust.value / 3;
-			speed = sensitivity.value / 3;
-		}
-		else if(scr_fov.value <= 75)
-		{
-			x_adjust = in_x_axis_adjust.value / 2;
-			y_adjust = in_y_axis_adjust.value / 2;
-			speed = sensitivity.value / 2;
-		}
-		else
-		{
-			x_adjust = in_x_axis_adjust.value;
-			y_adjust = in_y_axis_adjust.value;
-   			speed = sensitivity.value;
 		}
 	}
-	else
-	{
-		x_adjust = in_x_axis_adjust.value;
-		y_adjust = in_y_axis_adjust.value;
-		speed = sensitivity.value;
-	}
-
 	// Read the pad state.
 	SceCtrlData pad;
 	sceCtrlPeekBufferPositive(&pad, 1);
@@ -358,14 +313,14 @@ void IN_Move (usercmd_t *cmd)
 	// Convert the inputs to floats in the range [-1, 1].
 	// Implement the dead zone.
 	float deadZone = in_tolerance.value;
+	float speed = in_sensitivity.value;
 	float acceleration = in_acceleration.value;
-
-	if (speed <= 0)
-		speed = 0;
-
-    float x = IN_CalcInput(pad.Lx, (speed *0.1) + x_adjust, deadZone, acceleration);
-	float y = IN_CalcInput(pad.Ly, (speed *0.1) + y_adjust, deadZone, acceleration);
-
+	int   x_adjust = in_x_axis_adjust.value;
+	int   y_adjust = in_y_axis_adjust.value;
+	
+	float x = IN_CalcInput(pad.Lx+x_adjust, speed, deadZone, acceleration);
+	float y = IN_CalcInput(pad.Ly+y_adjust, speed, deadZone, acceleration);
+	
 	// Set the yaw.
 
 	// Analog nub look?
@@ -373,25 +328,25 @@ void IN_Move (usercmd_t *cmd)
 		const float yawScale = 30.0f;
 		cl.viewangles[YAW] -= yawScale * x * host_frametime;
 
-		if (in_freelook_analog.value)
+		if (in_mlook.value)
 		{
 			// Set the pitch.
 			const bool invertPitch = m_pitch.value < 0;
 			const float pitchScale = yawScale * (invertPitch ? -1 : 1);
 			cl.viewangles[PITCH] += pitchScale * y * host_frametime;
-
+	
 			// Don't look too far up or down.
-			if (cl.viewangles[PITCH] > 90.0f)
-				cl.viewangles[PITCH] = 90.0f;
-			if (cl.viewangles[PITCH] < -90.0f)
-				cl.viewangles[PITCH] = -90.0f;
+			if (cl.viewangles[PITCH] > 80.0f)
+				cl.viewangles[PITCH] = 80.0f;
+			if (cl.viewangles[PITCH] < -70.0f)
+				cl.viewangles[PITCH] = -70.0f;
 		}
 		else
 		{
 			// Move using up and down.
 			cmd->forwardmove -= cl_forwardspeed.value * y;
 		}
-	} else {
+	} else {	
 		cmd->sidemove += cl_sidespeed.value * x;
 		cmd->forwardmove -= cl_forwardspeed.value * y;
 	}

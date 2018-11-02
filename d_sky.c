@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // d_sky.c
 
 #include "quakedef.h"
-//#include "r_local.h"
+#include "r_local.h"
 #include "d_local.h"
 
 #define SKY_SPAN_SHIFT	5
@@ -64,16 +64,18 @@ D_DrawSkyScans8
 */
 void D_DrawSkyScans8 (espan_t *pspan)
 {
-	int				count, spancount, u, v, spancountminus1;
+	int				count, spancount, u, v;
 	unsigned char	*pdest;
 	fixed16_t		s, t, snext, tnext, sstep, tstep;
+	int				spancountminus1;
 
-	snext = sstep = 0;	// keep compiler happy
-	tnext = tstep = 0;	// ditto
+	sstep = 0;	// keep compiler happy
+	tstep = 0;	// ditto
 
 	do
 	{
-		pdest = (unsigned char *)((byte *)d_viewbuffer + (screenwidth * pspan->v) + pspan->u);
+		pdest = (unsigned char *)((byte *)d_viewbuffer +
+				(screenwidth * pspan->v) + pspan->u);
 
 		count = pspan->count;
 

@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -29,50 +29,35 @@ typedef union eval_s
 	func_t			function;
 	int				_int;
 	int				edict;
-} eval_t;
+} eval_t;	
 
 #define	MAX_ENT_LEAFS	16
 typedef struct edict_s
 {
 	qboolean	free;
 	link_t		area;				// linked to a division node or leaf
-
+	
 	int			num_leafs;
 	short		leafnums[MAX_ENT_LEAFS];
 
 	entity_state_t	baseline;
-#ifdef FITZQUAKE_PROTOCOL
-	unsigned char	alpha;				// johnfitz -- hack to support alpha since it's not part of entvars_t
-	qboolean		sendinterval;		// johnfitz -- send time until nextthink to client for better lerp timing
-#endif
+	
 	float		freetime;			// sv.time when the object was freed
 	entvars_t	v;					// C exported fields from progs
 // other fields from progs come immediately after
 } edict_t;
-
 #define	EDICT_FROM_AREA(l) STRUCT_FROM_LINK(l,edict_t,area)
-#define	GETEDICTFIELDVALUE(ed, fieldoffset) (fieldoffset ? (eval_t *)((byte *)&ed->v + fieldoffset) : NULL)
-
 extern	int	eval_gravity, eval_items2, eval_ammo_shells1, eval_ammo_nails1;
 extern	int	eval_ammo_lava_nails, eval_ammo_rockets1, eval_ammo_multi_rockets;
 extern	int	eval_ammo_cells1, eval_ammo_plasma;
+extern  int eval_idealpitch, eval_pitch_speed;
+// Half_life modes. Crow_bar
+extern	int	eval_renderamt, eval_rendermode, eval_rendercolor;
 
-// nehahra specific
-#if defined(SUPPORTS_ALPHA_ENTITY) || defined(SUPPORTS_KUROK_PROTOCOL)
-extern	int	eval_alpha;
-#endif
-
-#ifdef SUPPORTS_ALPHA_ENTITY
-extern  int eval_fullbright;
-#endif
-
-#ifdef SUPPORTS_NEHAHRA
-extern	int eval_idealpitch, eval_pitch_speed;
-#endif
-
-#ifdef SUPPORTS_KUROK_PROTOCOL
-extern	int eval_scale, eval_glow_size, eval_glow_red, eval_glow_green, eval_glow_blue; 
-#endif
+//Team XLink DP_SV_DRAWONLYTOCLIENT & DP_SV_NODRAWTOCLIENT
+extern int eval_drawonlytoclient; //Team Xlink DP_SV_DRAWONLYTOCLIENT
+extern int eval_nodrawtoclient; //Team Xlink DP_SV_NODRAWTOCLIENT
+#define GETEDICTFIELDVALUE(ed, fieldoffset) (fieldoffset ? (eval_t*)((char*)&ed->v + fieldoffset) : NULL)
 
 //============================================================================
 
@@ -92,7 +77,7 @@ extern	int				pr_edict_size;	// in bytes
 void PR_Init (void);
 
 void PR_ExecuteProgram (func_t fnum);
-void PR_LoadProgs (char *progsname);
+void PR_LoadProgs (void);
 
 void PR_Profile_f (void);
 
@@ -142,6 +127,23 @@ extern	int		type_size[8];
 typedef void (*builtin_t) (void);
 extern	builtin_t *pr_builtins;
 extern int pr_numbuiltins;
+// 2001-09-14 Enhanced BuiltIn Function System (EBFS) by Maddes  start
+
+typedef struct ebfs_builtin_s
+
+{
+	int			default_funcno;
+	char		*funcname;
+	builtin_t	function;
+	int			funcno;
+} ebfs_builtin_t;
+extern ebfs_builtin_t	pr_ebfs_builtins[];
+extern int				pr_ebfs_numbuiltins;
+#define PR_DEFAULT_FUNCNO_BUILTIN_FIND	100
+extern cvar_t	pr_builtin_find;
+extern cvar_t	pr_builtin_remap;
+#define PR_DEFAULT_FUNCNO_EXTENSION_FIND	99	// 2001-10-20 Extension System by Lord Havoc/Maddes
+// 2001-09-14 Enhanced BuiltIn Function System (EBFS) by Maddes  end
 
 extern int		pr_argc;
 
@@ -149,10 +151,13 @@ extern	qboolean	pr_trace;
 extern	dfunction_t	*pr_xfunction;
 extern	int			pr_xstatement;
 
-extern	unsigned short		pr_crc;
+extern	unsigned short	pr_crc;
+extern func_t	pr_func_endframe;	// 2000-01-02 EndFrame function by Maddes/FrikaC
 
 void PR_RunError (char *error, ...);
 
-void ED_PrintEdicts_f (void);
+void ED_PrintEdicts (void);
 void ED_PrintNum (int ent);
-dfunction_t *ED_FindFunction (char *name);
+
+//eval_t *GetEdictFieldValue(edict_t *ed, char *field);
+

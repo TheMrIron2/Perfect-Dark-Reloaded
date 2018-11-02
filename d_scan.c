@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // Portable C scan-level rasterization code, all pixel depths.
 
 #include "quakedef.h"
-//#include "r_local.h"
+#include "r_local.h"
 #include "d_local.h"
 
 unsigned char	*r_turb_pbase, *r_turb_pdest;
@@ -60,10 +60,16 @@ void D_WarpScreen (void)
 	hratio = h / (float)scr_vrect.height;
 
 	for (v=0 ; v<scr_vrect.height+AMP2*2 ; v++)
-		rowptr[v] = d_viewbuffer + (r_refdef.vrect.y * screenwidth) + (screenwidth * (int)((float)v * hratio * h / (h + AMP2 * 2)));
+	{
+		rowptr[v] = d_viewbuffer + (r_refdef.vrect.y * screenwidth) +
+				 (screenwidth * (int)((float)v * hratio * h / (h + AMP2 * 2)));
+	}
 
 	for (u=0 ; u<scr_vrect.width+AMP2*2 ; u++)
-		column[u] = r_refdef.vrect.x + (int)((float)u * wratio * w / (w + AMP2 * 2));
+	{
+		column[u] = r_refdef.vrect.x +
+				(int)((float)u * wratio * w / (w + AMP2 * 2));
+	}
 
 	turb = intsintable + ((int)(cl.time*SPEED)&(CYCLE-1));
 	dest = vid.buffer + scr_vrect.y * vid.rowbytes + scr_vrect.x;
@@ -84,37 +90,14 @@ void D_WarpScreen (void)
 }
 
 
-#ifdef SUPPORTS_SW_WATERALPHA
-/*
-=============
-D_DrawTurbulent8SpanC
-=============
-*/
-void D_DrawTurbulent8SpanC (void)
-{
-//	int		sturb, tturb;
-
-	do
-	{
-#define sturb (((r_turb_s + r_turb_turb[(r_turb_t>>16)&(CYCLE-1)])>>16)&63) // Manoel Kasimier - edited
-#define tturb (((r_turb_t + r_turb_turb[(r_turb_s>>16)&(CYCLE-1)])>>16)&63) // Manoel Kasimier - edited
-		*r_turb_pdest++ = *(r_turb_pbase + (tturb<<6) + sturb);
-		r_turb_s += r_turb_sstep;
-		r_turb_t += r_turb_tstep;
-	} while (--r_turb_spancount > 0);
-#undef sturb
-#undef tturb
-}
-
-#else
 #if	!id386
 
 /*
 =============
-D_DrawTurbulent8SpanC
+D_DrawTurbulent8Span
 =============
 */
-void D_DrawTurbulent8SpanC (void)
+void D_DrawTurbulent8Span (void)
 {
 	int		sturb, tturb;
 
@@ -128,8 +111,8 @@ void D_DrawTurbulent8SpanC (void)
 	} while (--r_turb_spancount > 0);
 }
 
-#endif // NO_ASSEMBLY (formerly !id386)
-#endif // NO SW_WATERALPHA
+#endif	// !id386
+
 
 /*
 =============
@@ -139,12 +122,10 @@ Turbulent8
 void Turbulent8 (espan_t *pspan)
 {
 	int				count;
-	int				izi, izistep, izistep2, sturb, tturb, teste; // Manoel Kasimier - translucent water
-	short			*pz; // Manoel Kasimier - translucent water
 	fixed16_t		snext, tnext;
 	float			sdivz, tdivz, zi, z, du, dv, spancountminus1;
 	float			sdivz16stepu, tdivz16stepu, zi16stepu;
-
+	
 	r_turb_turb = sintable + ((int)(cl.time*SPEED)&(CYCLE-1));
 
 	r_turb_sstep = 0;	// keep compiler happy
@@ -156,23 +137,10 @@ void Turbulent8 (espan_t *pspan)
 	tdivz16stepu = d_tdivzstepu * 16;
 	zi16stepu = d_zistepu * 16;
 
-#ifdef SUPPORTS_SW_WATERALPHA
-	// Manoel Kasimier - translucent water - begin
-// we count on FP exceptions being turned off to avoid range problems
-	izistep = (int)(d_zistepu * 0x8000 * 0x10000);
-#if 1
-	izistep2 = izistep*2;
-#else
-	izistep2 = izistep*4;
-#endif
-	// Manoel Kasimier - translucent water - end
-#endif
 	do
 	{
-		r_turb_pdest = (unsigned char *)((byte *)d_viewbuffer + (screenwidth * pspan->v) + pspan->u);
-#ifdef SUPPORTS_SW_WATERALPHA
-		pz = d_pzbuffer + (d_zwidth * pspan->v) + pspan->u; // Manoel Kasimier - translucent water
-#endif
+		r_turb_pdest = (unsigned char *)((byte *)d_viewbuffer +
+				(screenwidth * pspan->v) + pspan->u);
 
 		count = pspan->count;
 
@@ -184,10 +152,6 @@ void Turbulent8 (espan_t *pspan)
 		tdivz = d_tdivzorigin + dv*d_tdivzstepv + du*d_tdivzstepu;
 		zi = d_ziorigin + dv*d_zistepv + du*d_zistepu;
 		z = (float)0x10000 / zi;	// prescale to 16.16 fixed-point
-#ifdef SUPPORTS_SW_WATERALPHA
-	// we count on FP exceptions being turned off to avoid range problems // Manoel Kasimier - translucent water
-		izi = (int)(zi * 0x8000 * 0x10000); // Manoel Kasimier - translucent water
-#endif
 
 		r_turb_s = (int)(sdivz * z) + sadjust;
 		if (r_turb_s > bbextents)
@@ -272,121 +236,8 @@ void Turbulent8 (espan_t *pspan)
 			r_turb_s = r_turb_s & ((CYCLE<<16)-1);
 			r_turb_t = r_turb_t & ((CYCLE<<16)-1);
 
-#ifdef SUPPORTS_SW_WATERALPHA
-			// Manoel Kasimier - translucent water - begin
-			if (r_drawwater)
-			{
-				// r_wateralpha*10: 1&2=25% 3&4=33% 5&6=50% 7&8&9=66%
-				if (r_wateralpha.value <= 0.25) // 25%
-				{
-					teste = ((((int)r_turb_pdest-(int)d_viewbuffer) / screenwidth)+1) & 1;
-					if (teste) // 25% transparency
-					{
-#if 1
-stipple:
-						if (!(((int)r_turb_pdest + teste) & 1)) // if we are in the wrong pixel,
-						{
-							if (r_turb_spancount == 1)
-								goto end_of_loop;
-							// this is not working the way it should. it's drawing 1 pixel outside of the screen.
-							// advance one pixel
-							*r_turb_pdest++;
-							izi += izistep;
-							pz++;
-							r_turb_s += r_turb_sstep;
-							r_turb_t += r_turb_tstep;
-							r_turb_spancount = (r_turb_spancount/2); // -1
-						}
-						else
-							r_turb_spancount = (r_turb_spancount+1)/2;
-						// multiply steps by 2
-						r_turb_sstep*=2;
-						r_turb_tstep*=2;
-						do
-						{
-							#define sturb2 (((r_turb_s + r_turb_turb[(r_turb_t>>16)&(CYCLE-1)])>>16)&63)
-							#define tturb2 (((r_turb_t + r_turb_turb[(r_turb_s>>16)&(CYCLE-1)])>>16)&63)
-							if (*pz <= (izi >> 16))
-								*r_turb_pdest = *(r_turb_pbase + (tturb2<<6) + sturb2);
-							// advance two pixels
-							r_turb_pdest += 2;
-							pz += 2;
-							izi += izistep2;
-							r_turb_s += r_turb_sstep;
-							r_turb_t += r_turb_tstep;
-						}
-						while (--r_turb_spancount > 0);
-#else
-						stipple:
-						if (!(((int)r_turb_pdest + teste) & 1)) // if we are in the wrong pixel,
-						{
-							if (r_turb_spancount == 1)
-								goto end_of_loop;
-							// this is not working the way it should. it's drawing 1 pixel outside of the screen.
-							// advance one pixel
-							*r_turb_pdest++;
-							izi += izistep;
-							pz++;
-							r_turb_s += r_turb_sstep;
-							r_turb_t += r_turb_tstep;
-							r_turb_spancount = (r_turb_spancount/4); // -1
-						}
-						else
-							r_turb_spancount = (r_turb_spancount+1)/4;
-						// multiply steps by 4
-						r_turb_sstep*=4;
-						r_turb_tstep*=4;
-						do
-						{
-							#define sturb2 (((r_turb_s + r_turb_turb[(r_turb_t>>16)&(CYCLE-1)])>>16)&63)
-							#define tturb2 (((r_turb_t + r_turb_turb[(r_turb_s>>16)&(CYCLE-1)])>>16)&63)
-							if (*pz <= (izi >> 16))
-								*r_turb_pdest = *(r_turb_pbase + (tturb2<<6) + sturb2);
-							// advance four pixels
-							r_turb_pdest += 4;
-							pz += 4;
-							izi += izistep2;
-							r_turb_s += r_turb_sstep;
-							r_turb_t += r_turb_tstep;
-						}
-						while (--r_turb_spancount > 0);
-#endif
-					}
+			D_DrawTurbulent8Span ();
 
-				}
-				else if (r_wateralpha.value < 0.66) // 50%
-				{
-					teste = ((((int)r_turb_pdest-(int)d_viewbuffer) / screenwidth)+1) & 1;
-					goto stipple;
-				}
-#if 0
-				else //if (r_wateralpha.value >= 0.66 && alphamap) // 66%
-				{
-					do
-					{
-						if (*pz <= (izi >> 16))
-						{
-							sturb = ((r_turb_s + r_turb_turb[(r_turb_t>>16)&(CYCLE-1)])>>16)&63;
-							tturb = ((r_turb_t + r_turb_turb[(r_turb_s>>16)&(CYCLE-1)])>>16)&63;
-							#define temp *(r_turb_pbase + (tturb<<6) + sturb)
-							*r_turb_pdest = alphamap[*r_turb_pdest + temp*256];
-						}
-						*r_turb_pdest++;
-						izi += izistep;
-						pz++;
-						r_turb_s += r_turb_sstep;
-						r_turb_t += r_turb_tstep;
-					} while (--r_turb_spancount > 0);
-				}
-#endif
-			}
-
-			else
-			// Manoel Kasimier - translucent water - end
-			D_DrawTurbulent8SpanC ();
-
-end_of_loop: // Manoel Kasimier - translucent water
-#endif
 			r_turb_s = snext;
 			r_turb_t = tnext;
 
@@ -422,7 +273,8 @@ void D_DrawSpans8 (espan_t *pspan)
 
 	do
 	{
-		pdest = (unsigned char *)((byte *)d_viewbuffer + (screenwidth * pspan->v) + pspan->u);
+		pdest = (unsigned char *)((byte *)d_viewbuffer +
+				(screenwidth * pspan->v) + pspan->u);
 
 		count = pspan->count;
 
@@ -542,10 +394,11 @@ D_DrawZSpans
 */
 void D_DrawZSpans (espan_t *pspan)
 {
-	int				count, doublecount, izistep, izi;
+	int				count, doublecount, izistep;
+	int				izi;
 	short			*pdest;
 	unsigned		ltemp;
-	double			zi;
+	float			zi;
 	float			du, dv;
 
 // FIXME: check for clamping/range problems

@@ -27,8 +27,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define C(label) _##label
 #endif
 
+//
 // !!! note that this file must match the corresponding C structures at all
 // times !!!
+//
 
 // plane_t structure
 // !!! if this is changed, it must be changed in model.h too !!!
@@ -49,9 +51,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define	hu_lastclipnode		12
 #define	hu_clip_mins		16
 #define	hu_clip_maxs		28
-#define hu_available		40
-#define hu_size  			44
-
+#define hu_size  			40
 
 // dnode_t structure
 // !!! if this is changed, it must be changed in bspfile.h too !!!

@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -23,11 +23,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 /*
 
-pushmove objects do not obey gravity, and do not interact with each other or
-trigger fields, but block normal movement and push normal objects when they move.
 
-onground is set for toss objects when they come to a complete rest.
-it is set for steping or walking objects
+pushmove objects do not obey gravity, and do not interact with each other or trigger fields, but block normal movement and push normal objects when they move.
+
+onground is set for toss objects when they come to a complete rest.  it is set for steping or walking objects 
 
 doors, plats, etc are SOLID_BSP, and MOVETYPE_PUSH
 bonus items are SOLID_TRIGGER touch, and MOVETYPE_TOSS
@@ -45,6 +44,10 @@ cvar_t	sv_stopspeed = {"sv_stopspeed","100"};
 cvar_t	sv_gravity = {"sv_gravity","800",false,true};
 cvar_t	sv_maxvelocity = {"sv_maxvelocity","2000"};
 cvar_t	sv_nostep = {"sv_nostep","0"};
+cvar_t	sv_freezenonclients = {"sv_freezenonclients","0",false,false};
+#ifdef QUAKE2
+static	vec3_t	vec_origin = {0.0, 0.0, 0.0};
+#endif
 
 #define	MOVE_EPSILON	0.01
 
@@ -68,9 +71,11 @@ void SV_CheckAllEnts (void)
 			continue;
 		if (check->v.movetype == MOVETYPE_PUSH
 		|| check->v.movetype == MOVETYPE_NONE
-#ifdef QUAKE2
+
 		|| check->v.movetype == MOVETYPE_FOLLOW
-#endif
+		
+		|| check->v.movetype == MOVETYPE_COMPOUND
+		
 		|| check->v.movetype == MOVETYPE_NOCLIP)
 			continue;
 
@@ -87,11 +92,10 @@ SV_CheckVelocity
 void SV_CheckVelocity (edict_t *ent)
 {
 	int		i;
-#ifdef SUPPORTS_KUROK
-	float	wishspeed;
-#endif
 
+//
 // bound velocity
+//
 	for (i=0 ; i<3 ; i++)
 	{
 		if (IS_NAN(ent->v.velocity[i]))
@@ -104,21 +108,11 @@ void SV_CheckVelocity (edict_t *ent)
 			Con_Printf ("Got a NaN origin on %s\n", pr_strings + ent->v.classname);
 			ent->v.origin[i] = 0;
 		}
-#if !defined(SUPPORTS_KUROK)
 		if (ent->v.velocity[i] > sv_maxvelocity.value)
 			ent->v.velocity[i] = sv_maxvelocity.value;
 		else if (ent->v.velocity[i] < -sv_maxvelocity.value)
 			ent->v.velocity[i] = -sv_maxvelocity.value;
-#endif
 	}
-#ifdef SUPPORTS_KUROK
-	wishspeed = VectorLength(ent->v.velocity);
-	if (wishspeed > sv_maxvelocity.value)
-	{
-		VectorScale (ent->v.velocity, sv_maxvelocity.value/wishspeed, ent->v.velocity);
-		wishspeed = sv_maxvelocity.value;
-	}
-#endif
 }
 
 /*
@@ -134,44 +128,20 @@ Returns false if the entity removed itself.
 qboolean SV_RunThink (edict_t *ent)
 {
 	float	thinktime;
-#ifdef FITZQUAKE_PROTOCOL
-	float	oldframe; //johnfitz
-	int		i; //johnfitz
-#endif
 
 	thinktime = ent->v.nextthink;
 	if (thinktime <= 0 || thinktime > sv.time + host_frametime)
 		return true;
-
+		
 	if (thinktime < sv.time)
 		thinktime = sv.time;	// don't let things stay in the past.
 								// it is possible to start that way
 								// by a trigger with a local time.
-
-#ifdef FITZQUAKE_PROTOCOL
-	oldframe = ent->v.frame; //johnfitz
-#endif
-
 	ent->v.nextthink = 0;
 	pr_global_struct->time = thinktime;
 	pr_global_struct->self = EDICT_TO_PROG(ent);
 	pr_global_struct->other = EDICT_TO_PROG(sv.edicts);
 	PR_ExecuteProgram (ent->v.think);
-
-#ifdef FITZQUAKE_PROTOCOL
-//johnfitz -- PROTOCOL_FITZQUAKE
-//capture interval to nextthink here and send it to client for better
-//lerp timing, but only if interval is not 0.1 (which client assumes)
-	ent->sendinterval = false;
-	if (!ent->free && ent->v.nextthink && (ent->v.movetype == MOVETYPE_STEP || ent->v.frame != oldframe))
-	{
-		i = Q_rint((ent->v.nextthink-thinktime)*255);
-		if (i >= 0 && i < 256 && i != 25 && i != 26) //25 and 26 are close enough to 0.1 to not send
-			ent->sendinterval = true;
-	}
-//johnfitz
-#endif
-
 	return !ent->free;
 }
 
@@ -185,10 +155,10 @@ Two entities have touched, so run their touch functions
 void SV_Impact (edict_t *e1, edict_t *e2)
 {
 	int		old_self, old_other;
-
+	
 	old_self = pr_global_struct->self;
 	old_other = pr_global_struct->other;
-
+	
 	pr_global_struct->time = sv.time;
 	if (e1->v.touch && e1->v.solid != SOLID_NOT)
 	{
@@ -196,7 +166,7 @@ void SV_Impact (edict_t *e1, edict_t *e2)
 		pr_global_struct->other = EDICT_TO_PROG(e2);
 		PR_ExecuteProgram (e1->v.touch);
 	}
-
+	
 	if (e2->v.touch && e2->v.solid != SOLID_NOT)
 	{
 		pr_global_struct->self = EDICT_TO_PROG(e2);
@@ -221,15 +191,16 @@ returns the blocked flags (1 = floor, 2 = step / wall)
 
 int ClipVelocity (vec3_t in, vec3_t normal, vec3_t out, float overbounce)
 {
-	float	backoff, change;
+	float	backoff;
+	float	change;
 	int		i, blocked;
-
+	
 	blocked = 0;
 	if (normal[2] > 0)
 		blocked |= 1;		// floor
 	if (!normal[2])
 		blocked |= 2;		// step
-
+	
 	backoff = DotProduct (in, normal) * overbounce;
 
 	for (i=0 ; i<3 ; i++)
@@ -239,7 +210,7 @@ int ClipVelocity (vec3_t in, vec3_t normal, vec3_t out, float overbounce)
 		if (out[i] > -STOP_EPSILON && out[i] < STOP_EPSILON)
 			out[i] = 0;
 	}
-
+	
 	return blocked;
 }
 
@@ -259,18 +230,25 @@ If steptrace is not NULL, the trace of any vertical wall hit will be stored
 #define	MAX_CLIP_PLANES	5
 int SV_FlyMove (edict_t *ent, float time, trace_t *steptrace)
 {
-	int			i, j, bumpcount, numbumps, numplanes, blocked;
-	vec3_t		dir, planes[MAX_CLIP_PLANES], primal_velocity, original_velocity, new_velocity, end;
-	float		d, time_left;
+	int			bumpcount, numbumps;
+	vec3_t		dir;
+	float		d;
+	int			numplanes;
+	vec3_t		planes[MAX_CLIP_PLANES];
+	vec3_t		primal_velocity, original_velocity, new_velocity;
+	int			i, j;
 	trace_t		trace;
-
+	vec3_t		end;
+	float		time_left;
+	int			blocked;
+	
 	numbumps = 4;
-
+	
 	blocked = 0;
 	VectorCopy (ent->v.velocity, original_velocity);
 	VectorCopy (ent->v.velocity, primal_velocity);
 	numplanes = 0;
-
+	
 	time_left = time;
 
 	for (bumpcount=0 ; bumpcount<numbumps ; bumpcount++)
@@ -318,13 +296,16 @@ int SV_FlyMove (edict_t *ent, float time, trace_t *steptrace)
 				*steptrace = trace;	// save for player extrafriction
 		}
 
+//
 // run the impact function
+//
 		SV_Impact (ent, trace.ent);
 		if (ent->free)
 			break;		// removed by the impact function
 
+		
 		time_left -= time_left * trace.fraction;
-
+		
 	// cliped to another plane
 		if (numplanes >= MAX_CLIP_PLANES)
 		{	// this shouldn't really happen
@@ -335,7 +316,9 @@ int SV_FlyMove (edict_t *ent, float time, trace_t *steptrace)
 		VectorCopy (trace.plane.normal, planes[numplanes]);
 		numplanes++;
 
+//
 // modify original_velocity so it parallels all of the clip planes
+//
 		for (i=0 ; i<numplanes ; i++)
 		{
 			ClipVelocity (original_velocity, planes[i], new_velocity, 1);
@@ -348,7 +331,7 @@ int SV_FlyMove (edict_t *ent, float time, trace_t *steptrace)
 			if (j == numplanes)
 				break;
 		}
-
+		
 		if (i != numplanes)
 		{	// go along this plane
 			VectorCopy (new_velocity, ent->v.velocity);
@@ -366,8 +349,10 @@ int SV_FlyMove (edict_t *ent, float time, trace_t *steptrace)
 			VectorScale (dir, d, ent->v.velocity);
 		}
 
+//
 // if original velocity is against the original velocity, stop dead
-// to avoid tiny oscillations in sloping corners
+// to avoid tiny occilations in sloping corners
+//
 		if (DotProduct (ent->v.velocity, primal_velocity) <= 0)
 		{
 			VectorCopy (vec3_origin, ent->v.velocity);
@@ -389,6 +374,12 @@ void SV_AddGravity (edict_t *ent)
 {
 	float	ent_gravity;
 
+#ifdef QUAKE2
+	if (ent->v.gravity)
+		ent_gravity = ent->v.gravity;
+	else
+		ent_gravity = 1.0;
+#else
 	eval_t	*val;
 
 	val = GETEDICTFIELDVALUE(ent, eval_gravity);
@@ -396,6 +387,7 @@ void SV_AddGravity (edict_t *ent)
 		ent_gravity = val->_float;
 	else
 		ent_gravity = 1.0;
+#endif
 	ent->v.velocity[2] -= ent_gravity * sv_gravity.value * host_frametime;
 }
 
@@ -419,7 +411,7 @@ trace_t SV_PushEntity (edict_t *ent, vec3_t push)
 {
 	trace_t	trace;
 	vec3_t	end;
-
+		
 	VectorAdd (ent->v.origin, push, end);
 
 	if (ent->v.movetype == MOVETYPE_FLYMISSILE)
@@ -428,24 +420,25 @@ trace_t SV_PushEntity (edict_t *ent, vec3_t push)
 	// only clip against bmodels
 		trace = SV_Move (ent->v.origin, ent->v.mins, ent->v.maxs, end, MOVE_NOMONSTERS, ent);
 	else
-		trace = SV_Move (ent->v.origin, ent->v.mins, ent->v.maxs, end, MOVE_NORMAL, ent);
-
+		trace = SV_Move (ent->v.origin, ent->v.mins, ent->v.maxs, end, MOVE_NORMAL, ent);	
+	
 	VectorCopy (trace.endpos, ent->v.origin);
 	SV_LinkEdict (ent, true);
 
 	if (trace.ent)
-		SV_Impact (ent, trace.ent);
+		SV_Impact (ent, trace.ent);		
 
 	return trace;
-}
+}					
 
 
 /*
 ============
 SV_PushMove
+
 ============
 */
-void SV_PushMove (edict_t *pusher, float movetime)
+static edict_t *SV_PushMove( edict_t *pusher, float movetime )
 {
 	int			i, e;
 	edict_t		*check, *block;
@@ -486,6 +479,9 @@ void SV_PushMove (edict_t *pusher, float movetime)
 			continue;
 		if (check->v.movetype == MOVETYPE_PUSH
 		|| check->v.movetype == MOVETYPE_NONE
+//#ifdef QUAKE2
+		|| check->v.movetype == MOVETYPE_FOLLOW
+//#endif
 		|| check->v.movetype == MOVETYPE_NOCLIP)
 			continue;
 
@@ -558,16 +554,18 @@ void SV_PushMove (edict_t *pusher, float movetime)
 			return;
 		}
 	}
+
+
 }
 
-#ifdef SUPPORTS_BRUSHMODEL_ROTATION
+
 /*
 ============
 SV_PushRotate
 
 ============
 */
-void SV_PushRotate (edict_t *pusher, float movetime)
+static edict_t *SV_PushRotate( edict_t *pusher, float movetime )
 {
    int         i, e;
    edict_t      *check, *block;
@@ -591,113 +589,117 @@ void SV_PushRotate (edict_t *pusher, float movetime)
    VectorSubtract (vec3_origin, amove, a);
    AngleVectors (a, forward, right, up);
 
-   VectorCopy (pusher->v.angles, pushorig);
-
+	VectorCopy (pusher->v.angles, pushorig);
+	
 // move the pusher to it's final position
 
-   VectorAdd (pusher->v.angles, amove, pusher->v.angles);
-   pusher->v.ltime += movetime;
-   SV_LinkEdict (pusher, false);
+	VectorAdd (pusher->v.angles, amove, pusher->v.angles);
+	pusher->v.ltime += movetime;
+	SV_LinkEdict (pusher, false);
 
 
 // see if any solid entities are inside the final position
-   num_moved = 0;
-   check = NEXT_EDICT(sv.edicts);
-   for (e=1 ; e<sv.num_edicts ; e++, check = NEXT_EDICT(check))
-   {
-      if (check->free)
-         continue;
-      if (check->v.movetype == MOVETYPE_PUSH
-      || check->v.movetype == MOVETYPE_NONE
-//      || check->v.movetype == MOVETYPE_FOLLOW
-      || check->v.movetype == MOVETYPE_NOCLIP)
-         continue;
+	num_moved = 0;
+	check = NEXT_EDICT(sv.edicts);
+	for (e=1 ; e<sv.num_edicts ; e++, check = NEXT_EDICT(check))
+	{
+		if (check->free)
+			continue;
+		if (check->v.movetype == MOVETYPE_PUSH
+		|| check->v.movetype == MOVETYPE_NONE
 
-   // if the entity is standing on the pusher, it will definately be moved
-      if ( ! ( ((int)check->v.flags & FL_ONGROUND)
-      && PROG_TO_EDICT(check->v.groundentity) == pusher) )
-      {
-         if ( check->v.absmin[0] >= pusher->v.absmax[0]
-         || check->v.absmin[1] >= pusher->v.absmax[1]
-         || check->v.absmin[2] >= pusher->v.absmax[2]
-         || check->v.absmax[0] <= pusher->v.absmin[0]
-         || check->v.absmax[1] <= pusher->v.absmin[1]
-         || check->v.absmax[2] <= pusher->v.absmin[2] )
-            continue;
+		|| check->v.movetype == MOVETYPE_FOLLOW
+		
+		|| check->v.movetype == MOVETYPE_COMPOUND
+		
+		|| check->v.movetype == MOVETYPE_NOCLIP)
+			continue;
 
-      // see if the ent's bbox is inside the pusher's final position
-         if (!SV_TestEntityPosition (check))
-            continue;
-      }
+	// if the entity is standing on the pusher, it will definately be moved
+		if ( ! ( ((int)check->v.flags & FL_ONGROUND)
+		&& PROG_TO_EDICT(check->v.groundentity) == pusher) )
+		{
+			if ( check->v.absmin[0] >= pusher->v.absmax[0]
+			|| check->v.absmin[1] >= pusher->v.absmax[1]
+			|| check->v.absmin[2] >= pusher->v.absmax[2]
+			|| check->v.absmax[0] <= pusher->v.absmin[0]
+			|| check->v.absmax[1] <= pusher->v.absmin[1]
+			|| check->v.absmax[2] <= pusher->v.absmin[2] )
+				continue;
 
-   // remove the onground flag for non-players
-      if (check->v.movetype != MOVETYPE_WALK)
-         check->v.flags = (int)check->v.flags & ~FL_ONGROUND;
+		// see if the ent's bbox is inside the pusher's final position
+			if (!SV_TestEntityPosition (check))
+				continue;
+		}
 
-      VectorCopy (check->v.origin, entorig);
-      VectorCopy (check->v.origin, moved_from[num_moved]);
-      moved_edict[num_moved] = check;
-      num_moved++;
+	// remove the onground flag for non-players
+		if (check->v.movetype != MOVETYPE_WALK)
+			check->v.flags = (int)check->v.flags & ~FL_ONGROUND;
+		
+		VectorCopy (check->v.origin, entorig);
+		VectorCopy (check->v.origin, moved_from[num_moved]);
+		moved_edict[num_moved] = check;
+		num_moved++;
 
-      // calculate destination position
-      VectorSubtract (check->v.origin, pusher->v.origin, org);
-      org2[0] = DotProduct (org, forward);
-      org2[1] = -DotProduct (org, right);
-      org2[2] = DotProduct (org, up);
-      VectorSubtract (org2, org, move);
+		// calculate destination position
+		VectorSubtract (check->v.origin, pusher->v.origin, org);
+		org2[0] = DotProduct (org, forward);
+		org2[1] = -DotProduct (org, right);
+		org2[2] = DotProduct (org, up);
+		VectorSubtract (org2, org, move);
 
-      // try moving the contacted entity
-      pusher->v.solid = SOLID_NOT;
-      SV_PushEntity (check, move);
-      pusher->v.solid = SOLID_BSP;
+		// try moving the contacted entity 
+		pusher->v.solid = SOLID_NOT;
+		SV_PushEntity (check, move);
+		pusher->v.solid = SOLID_BSP;
 
-   // if it is still inside the pusher, block
-      block = SV_TestEntityPosition (check);
-      if (block)
-      {   // fail the move
-         if (check->v.mins[0] == check->v.maxs[0])
-            continue;
-         if (check->v.solid == SOLID_NOT || check->v.solid == SOLID_TRIGGER)
-         {   // corpse
-            check->v.mins[0] = check->v.mins[1] = 0;
-            VectorCopy (check->v.mins, check->v.maxs);
-            continue;
-         }
+	// if it is still inside the pusher, block
+		block = SV_TestEntityPosition (check);
+		if (block)
+		{	// fail the move
+			if (check->v.mins[0] == check->v.maxs[0])
+				continue;
+			if (check->v.solid == SOLID_NOT || check->v.solid == SOLID_TRIGGER)
+			{	// corpse
+				check->v.mins[0] = check->v.mins[1] = 0;
+				VectorCopy (check->v.mins, check->v.maxs);
+				continue;
+			}
+			
+			VectorCopy (entorig, check->v.origin);
+			SV_LinkEdict (check, true);
 
-         VectorCopy (entorig, check->v.origin);
-         SV_LinkEdict (check, true);
+			VectorCopy (pushorig, pusher->v.angles);
+			SV_LinkEdict (pusher, false);
+			pusher->v.ltime -= movetime;
 
-         VectorCopy (pushorig, pusher->v.angles);
-         SV_LinkEdict (pusher, false);
-         pusher->v.ltime -= movetime;
+			// if the pusher has a "blocked" function, call it
+			// otherwise, just stay in place until the obstacle is gone
+			if (pusher->v.blocked)
+			{
+				pr_global_struct->self = EDICT_TO_PROG(pusher);
+				pr_global_struct->other = EDICT_TO_PROG(check);
+				PR_ExecuteProgram (pusher->v.blocked);
+			}
+			
+		// move back any entities we already moved
+			for (i=0 ; i<num_moved ; i++)
+			{
+				VectorCopy (moved_from[i], moved_edict[i]->v.origin);
+				VectorSubtract (moved_edict[i]->v.angles, amove, moved_edict[i]->v.angles);
+				SV_LinkEdict (moved_edict[i], false);
+			}
+			return;
+		}
+		else
+		{
+			VectorAdd (check->v.angles, amove, check->v.angles);
+		}
+	}
 
-         // if the pusher has a "blocked" function, call it
-         // otherwise, just stay in place until the obstacle is gone
-         if (pusher->v.blocked)
-         {
-            pr_global_struct->self = EDICT_TO_PROG(pusher);
-            pr_global_struct->other = EDICT_TO_PROG(check);
-            PR_ExecuteProgram (pusher->v.blocked);
-         }
-
-      // move back any entities we already moved
-         for (i=0 ; i<num_moved ; i++)
-         {
-            VectorCopy (moved_from[i], moved_edict[i]->v.origin);
-            VectorSubtract (moved_edict[i]->v.angles, amove, moved_edict[i]->v.angles);
-            SV_LinkEdict (moved_edict[i], false);
-         }
-         return;
-      }
-      else
-      {
-         VectorAdd (check->v.angles, amove, check->v.angles);
-      }
-   }
-
-
+	
 }
-#endif
+
 
 /*
 ================
@@ -707,47 +709,165 @@ SV_Physics_Pusher
 */
 void SV_Physics_Pusher (edict_t *ent)
 {
-	float	thinktime;
-	float	oldltime;
-	float	movetime;
-
-	oldltime = ent->v.ltime;
-
+	float	oldtime, oldtime2;
+	float	thinktime, movetime;
+	edict_t	*pBlocker;
+	
+	pBlocker = NULL;
+	oldtime = ent->v.ltime;
+	
 	thinktime = ent->v.nextthink;
-	if (thinktime < ent->v.ltime + host_frametime)
+	if( thinktime < oldtime + host_frametime )
 	{
-		movetime = thinktime - ent->v.ltime;
-		if (movetime < 0)
-			movetime = 0;
+		movetime = thinktime - oldtime;
+		if( movetime < 0.0f ) movetime = 0.0f;
 	}
-	else
-		movetime = host_frametime;
+	else movetime = host_frametime;
 
-	if (movetime)
-   {
-#ifdef SUPPORTS_BRUSHMODEL_ROTATION
-//ROTATE START
-      if ((ent->v.avelocity[0] || ent->v.avelocity[1] || ent->v.avelocity[2]) && ent->v.solid == SOLID_BSP)
-         SV_PushRotate (ent, host_frametime);
-      else
-//ROTATE END
-#endif
-			SV_PushMove (ent, movetime);	// advances ent->v.ltime if not blocked
-   }
-
-	if (thinktime > oldltime && thinktime <= ent->v.ltime)
+		if( movetime )
 	{
-		ent->v.nextthink = 0;
+		if( !VectorIsNull( ent->v.avelocity ))
+		{
+			if( !VectorIsNull( ent->v.velocity ))
+			{
+				pBlocker = SV_PushRotate( ent, movetime );
+
+				if( !pBlocker )
+				{
+					oldtime2 = ent->v.ltime;
+
+					// reset the local time to what it was before we rotated
+					ent->v.ltime = oldtime;
+					pBlocker = SV_PushMove( ent, movetime );
+					if( oldtime2 < ent->v.ltime )
+						ent->v.ltime = oldtime2;
+				}
+			}
+			else
+			{
+				pBlocker = SV_PushRotate( ent, movetime );
+			}
+		}
+		else 
+		{
+			pBlocker = SV_PushMove( ent, movetime );
+		}
+	}
+
+	if( thinktime > oldtime && (( (int)ent->v.flags & FL_ALWAYSTHINK ) || thinktime <= ent->v.ltime ))
+	{
+		ent->v.nextthink = 0.0f;
 		pr_global_struct->time = sv.time;
 		pr_global_struct->self = EDICT_TO_PROG(ent);
-		pr_global_struct->other = EDICT_TO_PROG(sv.edicts);
 		PR_ExecuteProgram (ent->v.think);
 		if (ent->free)
 			return;
 	}
 }
+/*
+=============
+SV_Physics_Follow
 
+Entities that are "stuck" to another entity
+=============
+*/// from DarkPlaces
 
+void SV_Physics_Follow (edict_t *ent)
+{
+	vec3_t vf, vr, vu, angles, v;
+	edict_t *e;
+
+	// regular thinking
+	if (!SV_RunThink (ent))
+		return;
+
+	// LordHavoc: implemented rotation on MOVETYPE_FOLLOW objects
+	e = PROG_TO_EDICT(ent->v.aiment);
+	if (e->v.angles[0] == ent->v.punchangle[0] && e->v.angles[1] == ent->v.punchangle[1] && e->v.angles[2] == ent->v.punchangle[2])
+	{
+		// quick case for no rotation
+		VectorAdd(e->v.origin, ent->v.view_ofs, ent->v.origin);
+	}
+	else
+	{
+		angles[0] = -ent->v.punchangle[0];
+		angles[1] =  ent->v.punchangle[1];
+		angles[2] =  ent->v.punchangle[2];
+		AngleVectors (angles, vf, vr, vu);
+		v[0] = ent->v.view_ofs[0] * vf[0] + ent->v.view_ofs[1] * vr[0] + ent->v.view_ofs[2] * vu[0];
+		v[1] = ent->v.view_ofs[0] * vf[1] + ent->v.view_ofs[1] * vr[1] + ent->v.view_ofs[2] * vu[1];
+		v[2] = ent->v.view_ofs[0] * vf[2] + ent->v.view_ofs[1] * vr[2] + ent->v.view_ofs[2] * vu[2];
+		angles[0] = -e->v.angles[0];
+		angles[1] =  e->v.angles[1];
+		angles[2] =  e->v.angles[2];
+		AngleVectors (angles, vf, vr, vu);
+		ent->v.origin[0] = v[0] * vf[0] + v[1] * vf[1] + v[2] * vf[2] + e->v.origin[0];
+		ent->v.origin[1] = v[0] * vr[0] + v[1] * vr[1] + v[2] * vr[2] + e->v.origin[1];
+		ent->v.origin[2] = v[0] * vu[0] + v[1] * vu[1] + v[2] * vu[2] + e->v.origin[2];
+	}
+	VectorAdd (e->v.angles, ent->v.v_angle, ent->v.angles);
+	SV_LinkEdict (ent, true);
+}
+
+/*
+=============
+SV_Physics_Compound
+
+a glue two entities together
+=============
+*/
+void SV_Physics_Compound( edict_t *ent )
+{
+	edict_t	*e;
+	
+	// regular thinking
+	if( !SV_RunThink( ent )) return;
+
+	e = PROG_TO_EDICT(ent->v.aiment);
+	
+	if( ent->v.solid != SOLID_TRIGGER )
+		ent->v.solid = SOLID_NOT;
+
+	// not initialized ?
+	if( ent->v.ltime == 0.0f )
+	{
+		VectorCopy( e->v.origin, ent->v.oldorigin );
+		VectorCopy( e->v.angles, ent->v.avelocity );
+		ent->v.ltime = host_frametime;
+		return;
+	}
+
+	if( !VectorCompare( e->v.origin, ent->v.oldorigin ) || !VectorCompare( e->v.angles, ent->v.avelocity ))
+	{
+		matrix4x4	start_l, end_l, temp_l, child;
+
+		// create parent old position
+		Matrix4x4_CreateFromEntity( temp_l, ent->v.avelocity, ent->v.oldorigin, 1.0f );
+		Matrix4x4_Invert_Simple( start_l, temp_l );
+
+		// create parent actual position
+		Matrix4x4_CreateFromEntity( end_l, e->v.angles, e->v.origin, 1.0f );
+		
+		ent->v.angles[PITCH] = -ent->v.angles[PITCH];
+		
+		// create child actual position
+		Matrix4x4_CreateFromEntity( child, ent->v.angles, ent->v.origin, 1.0f );
+
+		// transform child from start to end
+		Matrix4x4_ConcatTransforms( temp_l, start_l, child );
+		Matrix4x4_ConcatTransforms( child, end_l, temp_l );
+
+		// create child final position
+		Matrix4x4_ConvertToEntity( child, ent->v.angles, ent->v.origin );
+	}
+
+	// notsolid ents never touch triggers
+	SV_LinkEdict( ent, (ent->v.solid == SOLID_NOT) ? false : true );
+
+	// shuffle states
+	VectorCopy( e->v.origin, ent->v.oldorigin );
+	VectorCopy( e->v.angles, ent->v.avelocity );
+}
 /*
 ===============================================================================
 
@@ -780,11 +900,11 @@ void SV_CheckStuck (edict_t *ent)
 	VectorCopy (ent->v.oldorigin, ent->v.origin);
 	if (!SV_TestEntityPosition(ent))
 	{
-		//Con_DPrintf ("Unstuck.\n");  // JPG - commented this out
+		Con_DPrintf ("Unstuck.\n");
 		SV_LinkEdict (ent, true);
 		return;
 	}
-
+	
 	for (z=0 ; z< 18 ; z++)
 		for (i=-1 ; i <= 1 ; i++)
 			for (j=-1 ; j <= 1 ; j++)
@@ -794,14 +914,14 @@ void SV_CheckStuck (edict_t *ent)
 				ent->v.origin[2] = org[2] + z;
 				if (!SV_TestEntityPosition(ent))
 				{
-					//Con_DPrintf ("Unstuck.\n");    // JPG - commented this out
+					Con_DPrintf ("Unstuck.\n");
 					SV_LinkEdict (ent, true);
 					return;
 				}
 			}
-
+			
 	VectorCopy (org, ent->v.origin);
-	//Con_DPrintf ("player is stuck.\n");    // JPG - commented this out
+	Con_DPrintf ("player is stuck.\n");
 }
 
 
@@ -814,16 +934,22 @@ qboolean SV_CheckWater (edict_t *ent)
 {
 	vec3_t	point;
 	int		cont;
+#ifdef QUAKE2
+	int		truecont;
+#endif
 
 	point[0] = ent->v.origin[0];
 	point[1] = ent->v.origin[1];
-	point[2] = ent->v.origin[2] + ent->v.mins[2] + 1;
-
+	point[2] = ent->v.origin[2] + ent->v.mins[2] + 1;	
+	
 	ent->v.waterlevel = 0;
 	ent->v.watertype = CONTENTS_EMPTY;
 	cont = SV_PointContents (point);
 	if (cont <= CONTENTS_WATER)
 	{
+#ifdef QUAKE2
+		truecont = SV_TruePointContents (point);
+#endif
 		ent->v.watertype = cont;
 		ent->v.waterlevel = 1;
 		point[2] = ent->v.origin[2] + (ent->v.mins[2] + ent->v.maxs[2])*0.5;
@@ -836,8 +962,24 @@ qboolean SV_CheckWater (edict_t *ent)
 			if (cont <= CONTENTS_WATER)
 				ent->v.waterlevel = 3;
 		}
-	}
+#ifdef QUAKE2
+		if (truecont <= CONTENTS_CURRENT_0 && truecont >= CONTENTS_CURRENT_DOWN)
+		{
+			static vec3_t current_table[] =
+			{
+				{1, 0, 0},
+				{0, 1, 0},
+				{-1, 0, 0},
+				{0, -1, 0},
+				{0, 0, 1},
+				{0, 0, -1}
+			};
 
+			VectorMA (ent->v.basevelocity, 150.0*ent->v.waterlevel/3.0, current_table[CONTENTS_CURRENT_0 - truecont], ent->v.basevelocity);
+		}
+#endif
+	}
+	
 	return ent->v.waterlevel > 1;
 }
 
@@ -852,19 +994,19 @@ void SV_WallFriction (edict_t *ent, trace_t *trace)
 	vec3_t		forward, right, up;
 	float		d, i;
 	vec3_t		into, side;
-
+	
 	AngleVectors (ent->v.v_angle, forward, right, up);
 	d = DotProduct (trace->plane.normal, forward);
-
+	
 	d += 0.5;
 	if (d >= 0)
 		return;
-
+		
 // cut the tangential velocity
 	i = DotProduct (trace->plane.normal, ent->v.velocity);
 	VectorScale (trace->plane.normal, i, into);
 	VectorSubtract (ent->v.velocity, into, side);
-
+	
 	ent->v.velocity[0] = side[0] * (1 + d);
 	ent->v.velocity[1] = side[1] * (1 + d);
 }
@@ -888,7 +1030,7 @@ int SV_TryUnstick (edict_t *ent, vec3_t oldvel)
 	vec3_t	dir;
 	int		clip;
 	trace_t	steptrace;
-
+	
 	VectorCopy (ent->v.origin, oldorg);
 	VectorCopy (vec3_origin, dir);
 
@@ -906,7 +1048,7 @@ int SV_TryUnstick (edict_t *ent, vec3_t oldvel)
 			case 6:	dir[0] = 2; dir[1] = -2; break;
 			case 7:	dir[0] = -2; dir[1] = -2; break;
 		}
-
+		
 		SV_PushEntity (ent, dir);
 
 // retry the original move
@@ -915,16 +1057,17 @@ int SV_TryUnstick (edict_t *ent, vec3_t oldvel)
 		ent->v. velocity[2] = 0;
 		clip = SV_FlyMove (ent, 0.1, &steptrace);
 
-		if ( fabsf(oldorg[1] - ent->v.origin[1]) > 4 || fabsf(oldorg[0] - ent->v.origin[0]) > 4 )
+		if ( fabsf(oldorg[1] - ent->v.origin[1]) > 4
+		|| fabsf(oldorg[0] - ent->v.origin[0]) > 4 )
 		{
 //Con_DPrintf ("unstuck!\n");
 			return clip;
 		}
-
+			
 // go back to the original pos and try again
 		VectorCopy (oldorg, ent->v.origin);
 	}
-
+	
 	VectorCopy (vec3_origin, ent->v.velocity);
 	return 7;		// still not moving
 }
@@ -939,17 +1082,22 @@ Only used by players
 #define	STEPSIZE	18
 void SV_WalkMove (edict_t *ent)
 {
-	vec3_t		upmove, downmove, oldorg, oldvel, nosteporg, nostepvel;
-	int			clip, oldonground;
+	vec3_t		upmove, downmove;
+	vec3_t		oldorg, oldvel;
+	vec3_t		nosteporg, nostepvel;
+	int			clip;
+	int			oldonground;
 	trace_t		steptrace, downtrace;
-
+	
+//
 // do a regular slide move unless it looks like you ran into a step
+//
 	oldonground = (int)ent->v.flags & FL_ONGROUND;
 	ent->v.flags = (int)ent->v.flags & ~FL_ONGROUND;
-
+	
 	VectorCopy (ent->v.origin, oldorg);
 	VectorCopy (ent->v.velocity, oldvel);
-
+	
 	clip = SV_FlyMove (ent, host_frametime, &steptrace);
 
 	if ( !(clip & 2) )
@@ -957,20 +1105,22 @@ void SV_WalkMove (edict_t *ent)
 
 	if (!oldonground && ent->v.waterlevel == 0)
 		return;		// don't stair up while jumping
-
+	
 	if (ent->v.movetype != MOVETYPE_WALK)
 		return;		// gibbed by a trigger
-
+	
 	if (sv_nostep.value)
 		return;
-
+	
 	if ( (int)sv_player->v.flags & FL_WATERJUMP )
 		return;
 
 	VectorCopy (ent->v.origin, nosteporg);
 	VectorCopy (ent->v.velocity, nostepvel);
 
+//
 // try moving up and forward to go up a step
+//
 	VectorCopy (oldorg, ent->v.origin);	// back to start pos
 
 	VectorCopy (vec3_origin, upmove);
@@ -991,12 +1141,13 @@ void SV_WalkMove (edict_t *ent)
 // in the clipping hulls
 	if (clip)
 	{
-		if ( fabsf(oldorg[1] - ent->v.origin[1]) < 0.03125 && fabsf(oldorg[0] - ent->v.origin[0]) < 0.03125 )
+		if ( fabsf(oldorg[1] - ent->v.origin[1]) < 0.03125
+		&& fabsf(oldorg[0] - ent->v.origin[0]) < 0.03125 )
 		{	// stepping up didn't make any progress
 			clip = SV_TryUnstick (ent, oldvel);
 		}
 	}
-
+	
 // extra friction based on view angle
 	if ( clip & 2 )
 		SV_WallFriction (ent, &steptrace);
@@ -1016,7 +1167,7 @@ void SV_WalkMove (edict_t *ent)
 	{
 // if the push down didn't end up on good ground, use the move without
 // the step up.  This happens near wall / slope combinations, and can
-// cause the player to hop up higher on a slope too steep to climb
+// cause the player to hop up higher on a slope too steep to climb	
 		VectorCopy (nosteporg, ent->v.origin);
 		VectorCopy (nostepvel, ent->v.velocity);
 	}
@@ -1035,15 +1186,21 @@ void SV_Physics_Client (edict_t	*ent, int num)
 	if ( ! svs.clients[num-1].active )
 		return;		// unconnected slot
 
+//
 // call standard client pre-think
+//	
 	pr_global_struct->time = sv.time;
 	pr_global_struct->self = EDICT_TO_PROG(ent);
 	PR_ExecuteProgram (pr_global_struct->PlayerPreThink);
-
+	
+//
 // do a move
+//
 	SV_CheckVelocity (ent);
 
+//
 // decide which move function to call
+//
 	switch ((int)ent->v.movetype)
 	{
 	case MOVETYPE_NONE:
@@ -1051,16 +1208,30 @@ void SV_Physics_Client (edict_t	*ent, int num)
 			return;
 		break;
 
+	case MOVETYPE_FOLLOW: //R00k: from DarkPlaces
+		SV_Physics_Follow (ent);
+		break;
+		
+	case MOVETYPE_COMPOUND:
+		SV_Physics_Compound(ent);
+		break;	
+		
 	case MOVETYPE_WALK:
 		if (!SV_RunThink (ent))
 			return;
 		if (!SV_CheckWater (ent) && ! ((int)ent->v.flags & FL_WATERJUMP) )
 			SV_AddGravity (ent);
 		SV_CheckStuck (ent);
+#ifdef QUAKE2
+		VectorAdd (ent->v.velocity, ent->v.basevelocity, ent->v.velocity);
+#endif
 		SV_WalkMove (ent);
 
+#ifdef QUAKE2
+		VectorSubtract (ent->v.velocity, ent->v.basevelocity, ent->v.velocity);
+#endif
 		break;
-
+		
 	case MOVETYPE_TOSS:
 	case MOVETYPE_BOUNCE:
 		SV_Physics_Toss (ent);
@@ -1071,18 +1242,20 @@ void SV_Physics_Client (edict_t	*ent, int num)
 			return;
 		SV_FlyMove (ent, host_frametime, NULL);
 		break;
-
+		
 	case MOVETYPE_NOCLIP:
 		if (!SV_RunThink (ent))
 			return;
 		VectorMA (ent->v.origin, host_frametime, ent->v.velocity, ent->v.origin);
 		break;
-
+		
 	default:
 		Sys_Error ("SV_Physics_client: bad movetype %i", (int)ent->v.movetype);
 	}
 
+//
 // call standard player post-think
+//		
 	SV_LinkEdict (ent, true);
 
 	pr_global_struct->time = sv.time;
@@ -1117,7 +1290,7 @@ void SV_Physics_Noclip (edict_t *ent)
 // regular thinking
 	if (!SV_RunThink (ent))
 		return;
-
+	
 	VectorMA (ent->v.angles, host_frametime, ent->v.avelocity, ent->v.angles);
 	VectorMA (ent->v.origin, host_frametime, ent->v.velocity, ent->v.origin);
 
@@ -1141,21 +1314,29 @@ SV_CheckWaterTransition
 void SV_CheckWaterTransition (edict_t *ent)
 {
 	int		cont;
-
+#ifdef QUAKE2
+	vec3_t	point;
+	
+	point[0] = ent->v.origin[0];
+	point[1] = ent->v.origin[1];
+	point[2] = ent->v.origin[2] + ent->v.mins[2] + 1;	
+	cont = SV_PointContents (point);
+#else
 	cont = SV_PointContents (ent->v.origin);
+#endif
 	if (!ent->v.watertype)
 	{	// just spawned here
 		ent->v.watertype = cont;
 		ent->v.waterlevel = 1;
 		return;
 	}
-
+	
 	if (cont <= CONTENTS_WATER)
 	{
 		if (ent->v.watertype == CONTENTS_EMPTY)
 		{	// just crossed into water
 			SV_StartSound (ent, 0, "misc/h2ohit1.wav", 255, 1);
-		}
+		}		
 		ent->v.watertype = cont;
 		ent->v.waterlevel = 1;
 	}
@@ -1164,7 +1345,7 @@ void SV_CheckWaterTransition (edict_t *ent)
 		if (ent->v.watertype != CONTENTS_EMPTY)
 		{	// just crossed into water
 			SV_StartSound (ent, 0, "misc/h2ohit1.wav", 255, 1);
-		}
+		}		
 		ent->v.watertype = CONTENTS_EMPTY;
 		ent->v.waterlevel = cont;
 	}
@@ -1182,11 +1363,39 @@ void SV_Physics_Toss (edict_t *ent)
 	trace_t	trace;
 	vec3_t	move;
 	float	backoff;
+#ifdef QUAKE2
+	edict_t	*groundentity;
 
+	groundentity = PROG_TO_EDICT(ent->v.groundentity);
+	if ((int)groundentity->v.flags & FL_CONVEYOR)
+		VectorScale(groundentity->v.movedir, groundentity->v.speed, ent->v.basevelocity);
+	else
+		VectorCopy(vec_origin, ent->v.basevelocity);
+	SV_CheckWater (ent);
+#endif
 	// regular thinking
 	if (!SV_RunThink (ent))
 		return;
 
+#ifdef QUAKE2
+	if (ent->v.velocity[2] > 0)
+		ent->v.flags = (int)ent->v.flags & ~FL_ONGROUND;
+
+	if ( ((int)ent->v.flags & FL_ONGROUND) )
+//@@
+		if (VectorCompare(ent->v.basevelocity, vec_origin))
+			return;
+
+	SV_CheckVelocity (ent);
+
+// add gravity
+	if (! ((int)ent->v.flags & FL_ONGROUND)
+		&& ent->v.movetype != MOVETYPE_FLY
+		&& ent->v.movetype != MOVETYPE_BOUNCEMISSILE
+		&& ent->v.movetype != MOVETYPE_FLYMISSILE)
+			SV_AddGravity (ent);
+
+#else
 // if onground, return without moving
 	if ( ((int)ent->v.flags & FL_ONGROUND) )
 		return;
@@ -1194,28 +1403,48 @@ void SV_Physics_Toss (edict_t *ent)
 	SV_CheckVelocity (ent);
 
 // add gravity
-	if (ent->v.movetype != MOVETYPE_FLY && ent->v.movetype != MOVETYPE_FLYMISSILE)
+	if (ent->v.movetype != MOVETYPE_FLY
+    && ent->v.movetype != MOVETYPE_BOUNCEMISSILE
+	&& ent->v.movetype != MOVETYPE_FLYMISSILE)
 		SV_AddGravity (ent);
+#endif
 
 // move angles
 	VectorMA (ent->v.angles, host_frametime, ent->v.avelocity, ent->v.angles);
 
 // move origin
+#ifdef QUAKE2
+	VectorAdd (ent->v.velocity, ent->v.basevelocity, ent->v.velocity);
+#endif
 	VectorScale (ent->v.velocity, host_frametime, move);
 	trace = SV_PushEntity (ent, move);
+#ifdef QUAKE2
+	VectorSubtract (ent->v.velocity, ent->v.basevelocity, ent->v.velocity);
+#endif
 	if (trace.fraction == 1)
 		return;
 	if (ent->free)
 		return;
-
-	backoff = (ent->v.movetype == MOVETYPE_BOUNCE) ? 1.5 : 1;
+	
+	if (ent->v.movetype == MOVETYPE_BOUNCE)
+		backoff = 1.5;
+//#ifdef QUAKE2
+	else if (ent->v.movetype == MOVETYPE_BOUNCEMISSILE)
+		backoff = 2.0;
+//#endif
+	else
+		backoff = 1;
 
 	ClipVelocity (ent->v.velocity, trace.plane.normal, ent->v.velocity, backoff);
 
 // stop if on ground
 	if (trace.plane.normal[2] > 0.7)
-	{
-		if (ent->v.velocity[2] < 60 || ent->v.movetype != MOVETYPE_BOUNCE)
+	{		
+//#ifdef QUAKE2
+		if (ent->v.velocity[2] < 60 || (ent->v.movetype != MOVETYPE_BOUNCE && ent->v.movetype != MOVETYPE_BOUNCEMISSILE))
+//#else
+//		if (ent->v.velocity[2] < 60 || ent->v.movetype != MOVETYPE_BOUNCE)
+//#endif
 		{
 			ent->v.flags = (int)ent->v.flags | FL_ONGROUND;
 			ent->v.groundentity = EDICT_TO_PROG(trace.ent);
@@ -1223,7 +1452,7 @@ void SV_Physics_Toss (edict_t *ent)
 			VectorCopy (vec3_origin, ent->v.avelocity);
 		}
 	}
-
+	
 // check for in water
 	SV_CheckWaterTransition (ent);
 }
@@ -1247,7 +1476,112 @@ This is also used for objects that have become still on the ground, but
 will fall if the floor is pulled out from under them.
 =============
 */
+#ifdef QUAKE2
+void SV_Physics_Step (edict_t *ent)
+{
+	qboolean	wasonground;
+	qboolean	inwater;
+	qboolean	hitsound = false;
+	float		*vel;
+	float		speed, newspeed, control;
+	float		friction;
+	edict_t		*groundentity;
 
+	groundentity = PROG_TO_EDICT(ent->v.groundentity);
+	if ((int)groundentity->v.flags & FL_CONVEYOR)
+		VectorScale(groundentity->v.movedir, groundentity->v.speed, ent->v.basevelocity);
+	else
+		VectorCopy(vec_origin, ent->v.basevelocity);
+//@@
+	pr_global_struct->time = sv.time;
+	pr_global_struct->self = EDICT_TO_PROG(ent);
+	PF_WaterMove();
+
+	SV_CheckVelocity (ent);
+
+	wasonground = (int)ent->v.flags & FL_ONGROUND;
+//	ent->v.flags = (int)ent->v.flags & ~FL_ONGROUND;
+
+	// add gravity except:
+	//   flying monsters
+	//   swimming monsters who are in the water
+	inwater = SV_CheckWater(ent);
+	if (! wasonground)
+		if (!((int)ent->v.flags & FL_FLY))
+			if (!(((int)ent->v.flags & FL_SWIM) && (ent->v.waterlevel > 0)))
+			{
+				if (ent->v.velocity[2] < sv_gravity.value*-0.1)
+					hitsound = true;
+				if (!inwater)
+					SV_AddGravity (ent);
+			}
+
+	if (!VectorCompare(ent->v.velocity, vec_origin) || !VectorCompare(ent->v.basevelocity, vec_origin))
+	{
+		ent->v.flags = (int)ent->v.flags & ~FL_ONGROUND;
+		// apply friction
+		// let dead monsters who aren't completely onground slide
+		if (wasonground)
+			if (!(ent->v.health <= 0.0 && !SV_CheckBottom(ent)))
+			{
+				vel = ent->v.velocity;
+				speed = sqrtf(vel[0]*vel[0] +vel[1]*vel[1]);
+				if (speed)
+				{
+					friction = sv_friction.value;
+
+					control = speed < sv_stopspeed.value ? sv_stopspeed.value : speed;
+					newspeed = speed - host_frametime*control*friction;
+
+					if (newspeed < 0)
+						newspeed = 0;
+					newspeed /= speed;
+
+					vel[0] = vel[0] * newspeed;
+					vel[1] = vel[1] * newspeed;
+				}
+			}
+
+		VectorAdd (ent->v.velocity, ent->v.basevelocity, ent->v.velocity);
+		SV_FlyMove (ent, host_frametime, NULL);
+		VectorSubtract (ent->v.velocity, ent->v.basevelocity, ent->v.velocity);
+
+		// determine if it's on solid ground at all
+		{
+			vec3_t	mins, maxs, point;
+			int		x, y;
+		
+			VectorAdd (ent->v.origin, ent->v.mins, mins);
+			VectorAdd (ent->v.origin, ent->v.maxs, maxs);
+
+			point[2] = mins[2] - 1;
+			for	(x=0 ; x<=1 ; x++)
+				for	(y=0 ; y<=1 ; y++)
+				{
+					point[0] = x ? maxs[0] : mins[0];
+					point[1] = y ? maxs[1] : mins[1];
+					if (SV_PointContents (point) == CONTENTS_SOLID)
+					{
+						ent->v.flags = (int)ent->v.flags | FL_ONGROUND;
+						break;
+					}
+				}
+
+		}
+
+		SV_LinkEdict (ent, true);
+
+		if ((int)ent->v.flags & FL_ONGROUND)
+			if (!wasonground)
+				if (hitsound)
+					SV_StartSound (ent, 0, "demon/dland2.wav", 255, 1);
+	}
+
+// regular thinking
+	SV_RunThink (ent);
+	SV_CheckWaterTransition (ent);
+}
+#else
 void SV_Physics_Step (edict_t *ent)
 {
 	qboolean	hitsound;
@@ -1274,9 +1608,10 @@ void SV_Physics_Step (edict_t *ent)
 
 // regular thinking
 	SV_RunThink (ent);
-
+	
 	SV_CheckWaterTransition (ent);
 }
+#endif
 
 //============================================================================
 
@@ -1288,8 +1623,9 @@ SV_Physics
 */
 void SV_Physics (void)
 {
-	int		i;
+	int		i, cap_edicts;
 	edict_t	*ent;
+	extern dfunction_t *EndFrameQC;
 
 // let the progs know that a new frame has started
 	pr_global_struct->self = EDICT_TO_PROG(sv.edicts);
@@ -1299,15 +1635,25 @@ void SV_Physics (void)
 
 //SV_CheckAllEnts ();
 
+//
 // treat each object in turn
+//
 	ent = sv.edicts;
-	for (i=0 ; i<sv.num_edicts ; i++, ent = NEXT_EDICT(ent))
+
+	cap_edicts = sv.num_edicts;
+
+	if (sv_freezenonclients.value)
+		cap_edicts = svs.maxclients + 1;
+
+	for (i = 0 ; i < cap_edicts ; i++, ent = NEXT_EDICT(ent))
 	{
 		if (ent->free)
 			continue;
 
 		if (pr_global_struct->force_retouch)
+		{
 			SV_LinkEdict (ent, true);	// force retouch even for stationary
+		}
 
 		if (i > 0 && i <= svs.maxclients)
 			SV_Physics_Client (ent, i);
@@ -1315,38 +1661,54 @@ void SV_Physics (void)
 			SV_Physics_Pusher (ent);
 		else if (ent->v.movetype == MOVETYPE_NONE)
 			SV_Physics_None (ent);
+//#ifdef QUAKE2
+		else if (ent->v.movetype == MOVETYPE_FOLLOW)
+			SV_Physics_Follow (ent);
+//#endif
+		else if (ent->v.movetype == MOVETYPE_COMPOUND)
+			SV_Physics_Compound(ent);
 		else if (ent->v.movetype == MOVETYPE_NOCLIP)
 			SV_Physics_Noclip (ent);
 		else if (ent->v.movetype == MOVETYPE_STEP)
 			SV_Physics_Step (ent);
-		else if (ent->v.movetype == MOVETYPE_TOSS
+		else if (ent->v.movetype == MOVETYPE_TOSS 
 		|| ent->v.movetype == MOVETYPE_BOUNCE
+//#ifdef QUAKE2
+		|| ent->v.movetype == MOVETYPE_BOUNCEMISSILE
+//#endif
 		|| ent->v.movetype == MOVETYPE_FLY
 		|| ent->v.movetype == MOVETYPE_FLYMISSILE)
 			SV_Physics_Toss (ent);
 		else
-			Sys_Error ("SV_Physics: bad movetype %i", (int)ent->v.movetype);
+			Sys_Error ("SV_Physics: bad movetype %i", (int)ent->v.movetype);			
+	}
+	
+	if (pr_global_struct->force_retouch)
+		pr_global_struct->force_retouch--;	
+
+	// LordHavoc: endframe support
+	if (EndFrameQC)
+	{
+		pr_global_struct->self = EDICT_TO_PROG(sv.edicts);
+		pr_global_struct->other = EDICT_TO_PROG(sv.edicts);
+		pr_global_struct->time = sv.time;
+		PR_ExecuteProgram ((func_t)(EndFrameQC - pr_functions));
 	}
 
-	if (pr_global_struct->force_retouch)
-		pr_global_struct->force_retouch--;
-
-	sv.time += host_frametime;
+		sv.time += host_frametime;
 }
 
-
-#ifdef QUAKE2
 trace_t SV_Trace_Toss (edict_t *ent, edict_t *ignore)
 {
+	double	save_frametime;
+	vec3_t	move, end;
 	edict_t	tempent, *tent;
 	trace_t	trace;
-	vec3_t	move, end;
-	double	save_frametime;
 
 	save_frametime = host_frametime;
 	host_frametime = 0.05;
 
-	memcpy(&tempent, ent, sizeof(edict_t));
+	memcpy (&tempent, ent, sizeof(edict_t));
 	tent = &tempent;
 
 	while (1)
@@ -1364,6 +1726,6 @@ trace_t SV_Trace_Toss (edict_t *ent, edict_t *ignore)
 				break;
 	}
 	host_frametime = save_frametime;
+
 	return trace;
 }
-#endif

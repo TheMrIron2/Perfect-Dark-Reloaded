@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -19,12 +19,15 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 // r_local.h -- private refresh defs
 
-#ifndef GLQUAKE
+#if !defined(GLQUAKE) && !defined(PSP_HARDWARE_VIDEO)
 #include "r_shared.h"
 
-#define ALIAS_BASE_SIZE_RATIO		(1.0 / 11.0) // normalizing factor so player model works out to about 1 pixel per triangle
+#define ALIAS_BASE_SIZE_RATIO		(1.0 / 11.0)
+					// normalizing factor so player model works out to about
+					//  1 pixel per triangle
 
-#define BMODEL_FULLY_CLIPPED	0x10 // value returned by R_BmodelCheckBBox () if bbox is trivially rejected
+#define BMODEL_FULLY_CLIPPED	0x10 // value returned by R_BmodelCheckBBox ()
+									 //  if bbox is trivially rejected
 
 //===========================================================================
 // viewmodel lighting
@@ -56,6 +59,7 @@ extern cvar_t	r_timegraph;
 extern cvar_t	r_graphheight;
 extern cvar_t	r_clearcolor;
 extern cvar_t	r_waterwarp;
+extern cvar_t	r_wateralpha;
 extern cvar_t	r_fullbright;
 extern cvar_t	r_drawentities;
 extern cvar_t	r_aliasstats;
@@ -67,16 +71,8 @@ extern cvar_t	r_maxsurfs;
 extern cvar_t	r_numsurfs;
 extern cvar_t	r_reportedgeout;
 extern cvar_t	r_maxedges;
-//extern cvar_t	r_numedges;
-#ifdef SUPPORTS_SW_SKYBOX
-extern cvar_t	r_skyname; // Manoel Kasimier - skyboxes // Code taken from the ToChriS engine - Author: Vic (vic@quakesrc.org) (http://hkitchen.quakesrc.org/)
-#endif
-#ifdef SUPPORTS_ENTITY_ALPHA
-extern cvar_t	r_ringalpha;
-#endif
-#ifdef SUPPORTS_SW_WATERALPHA
-extern cvar_t	r_novis;
-#endif
+extern cvar_t	r_numedges;
+extern cvar_t	r_vsync;
 
 
 #define XCENTERING	(1.0 / 2.0)
@@ -129,7 +125,9 @@ extern int	vstartscan;
 void R_ClearPolyList (void);
 void R_DrawPolyList (void);
 
+//
 // current entity info
+//
 extern	qboolean		insubmodel;
 extern	vec3_t			r_worldmodelorg;
 
@@ -145,7 +143,6 @@ void R_DrawSurfaceBlock16 (void);
 void R_DrawSurfaceBlock8 (void);
 texture_t *R_TextureAnimation (texture_t *base);
 
-
 #if	id386
 
 void R_DrawSurfaceBlock8_mip0 (void);
@@ -154,27 +151,6 @@ void R_DrawSurfaceBlock8_mip2 (void);
 void R_DrawSurfaceBlock8_mip3 (void);
 
 #endif
-
-extern cvar_t	r_draworder;
-extern cvar_t	r_drawentities;
-extern cvar_t	r_aliasstats;
-extern cvar_t	r_dspeeds;
-extern cvar_t	r_drawflat;
-extern cvar_t	r_ambient;
-extern cvar_t	r_reportsurfout;
-extern cvar_t	r_maxsurfs;
-extern cvar_t	r_numsurfs;
-extern cvar_t	r_reportedgeout;
-extern cvar_t	r_maxedges;
-extern cvar_t	r_numedges;
-extern cvar_t	r_speeds;
-extern cvar_t	r_timegraph;
-extern cvar_t	r_graphheight;
-extern cvar_t	r_clearcolor;
-
-extern cvar_t	r_waterwarp;
-extern cvar_t	r_fullbright;
-extern cvar_t	r_interpolate_animation;
 
 void R_GenSkyTile (void *pdest);
 void R_GenSkyTile16 (void *pdest);
@@ -325,9 +301,6 @@ extern int		r_clipflags;
 extern int		r_dlightframecount;
 extern qboolean	r_fov_greater_than_90;
 
-#ifdef SUPPORTS_SOFTWARE_FTESTAIN
-void R_BuildLightmaps(void); //qbism ftestain
-#endif
 void R_StoreEfrags (efrag_t **ppefrag);
 void R_TimeRefresh_f (void);
 void R_TimeGraph (void);
@@ -342,14 +315,5 @@ void R_EmitEdge (mvertex_t *pv0, mvertex_t *pv1);
 void R_ClipEdge (mvertex_t *pv0, mvertex_t *pv1, clipplane_t *clip);
 void R_SplitEntityOnNode2 (mnode_t *node);
 void R_MarkLights (dlight_t *light, int bit, mnode_t *node);
-#ifdef SUPPORTS_SW_SKYBOX
-void R_InitSkyBox (void); // Manoel Kasimier - skyboxes // Code taken from the ToChriS engine - Author: Vic (vic@quakesrc.org) (http://hkitchen.quakesrc.org/)
-qboolean R_LoadSkybox (char *name); // Manoel Kasimier - skyboxes // Code taken from the ToChriS engine - Author: Vic (vic@quakesrc.org) (http://hkitchen.quakesrc.org/)
-#endif
 
 #endif
-
-// !!! if this is changed, it must be changed in d_ifacea.h too !!!
-#define CACHE_SIZE	32		// used to align key data structures
-
-// Baker: moved ^^ from quakedef.h because only used for winquake/software render

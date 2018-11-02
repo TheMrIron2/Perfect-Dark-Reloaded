@@ -19,12 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 // d_iface.h: interface header file for rasterization driver modules
 
-#if !defined(MACOSX) // Baker: Reason, unknown but Fruitz Dojo uses 640 WARP_WIDTH
 #define WARP_WIDTH		320
-#else 
-#define WARP_WIDTH		640 //320
-#endif // ^^ No idea why Fruitz did this; this is for software renderer.  Sometime play around and see if makes a difference in appearance.
-
 #define WARP_HEIGHT		200
 
 #define MAX_LBM_HEIGHT	480
@@ -41,18 +36,7 @@ typedef enum {
 } ptype_t;
 
 // !!! if this is changed, it must be changed in d_ifacea.h too !!!
-typedef struct particle_s
-{
-// driver-usable fields
-	vec3_t		org;
-	float		color;
-// drivers never touch the following fields
-	struct particle_s	*next;
-	vec3_t		vel;
-	float		ramp;
-	float		die;
-	ptype_t		type;
-} particle_t;
+
 
 #define PARTICLE_Z_CLIP	8.0
 
@@ -164,6 +148,7 @@ void D_Init (void);
 void D_ViewChanged (void);
 void D_SetupFrame (void);
 void D_StartParticles (void);
+void D_TurnZOn (void);
 void D_WarpScreen (void);
 
 void D_FillRect (vrect_t *vrect, int color);
@@ -176,6 +161,7 @@ void D_UpdateRects (vrect_t *prect);
 void D_PolysetUpdateTables (void);
 
 // these are currently for internal use only, and should not be used by drivers
+extern int				r_skydirect;
 extern byte				*r_skysource;
 
 // transparency types for D_DrawRect ()
@@ -196,7 +182,8 @@ typedef struct
 	pixel_t		*surfdat;	// destination for generated surface
 	int			rowbytes;	// destination logical width in bytes
 	msurface_t	*surf;		// description for surface to generate
-	fixed8_t	lightadj[MAXLIGHTMAPS]; // adjust for lightmap levels for dynamic lighting
+	fixed8_t	lightadj[MAXLIGHTMAPS];
+							// adjust for lightmap levels for dynamic lighting
 	texture_t	*texture;	// corrected for animating textures
 	int			surfmip;	// mipmapped ratio of surface texels / world pixels
 	int			surfwidth;	// in mipmapped texels
@@ -228,3 +215,4 @@ extern int		c_surf;
 extern vrect_t	scr_vrect;
 
 extern byte		*r_warpbuffer;
+

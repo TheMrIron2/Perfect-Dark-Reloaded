@@ -21,6 +21,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "quakedef.h"
 
 
+/*
+
+*/
+
 typedef struct
 {
 	int				s;
@@ -149,35 +153,33 @@ void PR_PrintStatement (dstatement_t *s)
 	
 	if ( (unsigned)s->op < sizeof(pr_opnames)/sizeof(pr_opnames[0]))
 	{
-		Con_SafePrintf ("%s ",  pr_opnames[s->op]);
+		Con_Printf ("%s ",  pr_opnames[s->op]);
 		i = strlen(pr_opnames[s->op]);
 		for ( ; i<10 ; i++)
-			Con_SafePrintf (" ");
+			Con_Printf (" ");
 	}
 		
 	if (s->op == OP_IF || s->op == OP_IFNOT)
-	{
-		Con_SafePrintf ("%sbranch %i",PR_GlobalString(s->a),s->b);
-	}
+		Con_Printf ("%sbranch %i",PR_GlobalString(s->a),s->b);
 	else if (s->op == OP_GOTO)
 	{
-		Con_SafePrintf ("branch %i",s->a);
+		Con_Printf ("branch %i",s->a);
 	}
 	else if ( (unsigned)(s->op - OP_STORE_F) < 6)
 	{
-		Con_SafePrintf ("%s",PR_GlobalString(s->a));
-		Con_SafePrintf ("%s", PR_GlobalStringNoContents(s->b));
+		Con_Printf ("%s",PR_GlobalString(s->a));
+		Con_Printf ("%s", PR_GlobalStringNoContents(s->b));
 	}
 	else
 	{
 		if (s->a)
-			Con_SafePrintf ("%s",PR_GlobalString(s->a));
+			Con_Printf ("%s",PR_GlobalString(s->a));
 		if (s->b)
-			Con_SafePrintf ("%s",PR_GlobalString(s->b));
+			Con_Printf ("%s",PR_GlobalString(s->b));
 		if (s->c)
-			Con_SafePrintf ("%s", PR_GlobalStringNoContents(s->c));
+			Con_Printf ("%s", PR_GlobalStringNoContents(s->c));
 	}
-	Con_SafePrintf ("\n");
+	Con_Printf ("\n");
 }
 
 /*
@@ -192,7 +194,7 @@ void PR_StackTrace (void)
 	
 	if (pr_depth == 0)
 	{
-		Con_SafePrintf ("<NO STACK>\n");
+		Con_Printf ("<NO STACK>\n");
 		return;
 	}
 	
@@ -202,9 +204,11 @@ void PR_StackTrace (void)
 		f = pr_stack[i].f;
 		
 		if (!f)
-			Con_SafePrintf ("<NO FUNCTION>\n");
+		{
+			Con_Printf ("<NO FUNCTION>\n");
+		}
 		else
-			Con_SafePrintf ("%12s : %s\n", pr_strings + f->s_file, pr_strings + f->s_name);		
+			Con_Printf ("%12s : %s\n", pr_strings + f->s_file, pr_strings + f->s_name);		
 	}
 }
 
@@ -218,15 +222,11 @@ PR_Profile_f
 void PR_Profile_f (void)
 {
 	dfunction_t	*f, *best;
-	int		i, max, num = 0;
+	int			max;
+	int			num;
+	int			i;
 	
-	// Baker: the fix for the profile command
-	if (!sv.active) 
-	{
-		Con_SafePrintf ("%s : Can't profile .. no active server.\n", Cmd_Argv(0));
-		return;
-	}
-	
+	num = 0;	
 	do
 	{
 		max = 0;
@@ -243,7 +243,7 @@ void PR_Profile_f (void)
 		if (best)
 		{
 			if (num < 10)
-				Con_SafePrintf ("%7i %s\n", best->profile, pr_strings+best->s_name);
+				Con_Printf ("%7i %s\n", best->profile, pr_strings+best->s_name);
 			num++;
 			best->profile = 0;
 		}
@@ -264,12 +264,12 @@ void PR_RunError (char *error, ...)
 	char		string[1024];
 
 	va_start (argptr,error);
-	vsnprintf (string,sizeof(string),error,argptr);
+	vsprintf (string,error,argptr);
 	va_end (argptr);
 
 	PR_PrintStatement (pr_statements + pr_xstatement);
 	PR_StackTrace ();
-	Con_SafePrintf ("%s\n", string);
+	Con_Printf ("%s\n", string);
 	
 	pr_depth = 0;		// dump the stack so host_error can shutdown functions
 
@@ -352,6 +352,8 @@ int PR_LeaveFunction (void)
 	return pr_stack[pr_depth].s;
 }
 
+#define RUNAWAY_STEP (RUNAWAY / 5)
+#define RUNAWAY	     5000000
 
 /*
 ====================
@@ -360,11 +362,19 @@ PR_ExecuteProgram
 */
 void PR_ExecuteProgram (func_t fnum)
 {
-	eval_t	*a, *b, *c, *ptr;
-	int			i, s, runaway, exitdepth;
+	eval_t	*a, *b, *c;
+	int			s;
 	dstatement_t	*st;
 	dfunction_t	*f, *newf;
+	int		runaway;
+	int		i;
 	edict_t	*ed;
+	int		exitdepth;
+	eval_t	*ptr;
+// 2001-09-14 Enhanced BuiltIn Function System (EBFS) by Maddes  start
+	char	*funcname;
+	char	*remaphint;
+// 2001-09-14 Enhanced BuiltIn Function System (EBFS) by Maddes  end
 
 	if (!fnum || fnum >= progs->numfunctions)
 	{
@@ -375,7 +385,7 @@ void PR_ExecuteProgram (func_t fnum)
 	
 	f = &pr_functions[fnum];
 
-	runaway = 100000;
+	runaway = RUNAWAY; //was 100000;
 	pr_trace = false;
 
 // make a stack frame
@@ -386,6 +396,8 @@ void PR_ExecuteProgram (func_t fnum)
 while (1)
 {
 	s++;	// next statement
+	pr_xstatement = s;
+	pr_xfunction->profile++;
 
 	st = &pr_statements[s];
 	a = (eval_t *)&pr_globals[st->a];
@@ -394,10 +406,13 @@ while (1)
 	
 	if (!--runaway)
 		PR_RunError ("runaway loop error");
-		
-	pr_xfunction->profile++;
-	pr_xstatement = s;
 	
+	if (runaway < RUNAWAY - RUNAWAY_STEP + 1 && runaway % RUNAWAY_STEP == 0)
+	{
+		Con_Printf ("PR_ExecuteProgram: runaway loop %d\n", runaway / RUNAWAY_STEP);
+		SCR_UpdateScreen (); // Force screen update
+		S_ClearBuffer ();    // Avoid looping sounds
+	}
 	if (pr_trace)
 		PR_PrintStatement (st);
 		
@@ -622,8 +637,21 @@ while (1)
 		if (newf->first_statement < 0)
 		{	// negative statements are built in functions
 			i = -newf->first_statement;
-			if (i >= pr_numbuiltins)
-				PR_RunError ("Bad builtin call number");
+// 2001-09-14 Enhanced BuiltIn Function System (EBFS) by Maddes  start
+			if ( (i >= pr_numbuiltins)||(pr_builtins[i] == pr_ebfs_builtins[0].function) )
+			{
+				funcname = pr_strings + newf->s_name;
+				if (pr_builtin_remap.value)
+				{
+					remaphint = NULL;
+				}
+				else
+				{
+					remaphint = "Try \"builtin remapping\" by setting PR_BUILTIN_REMAP to 1\n";
+				}
+			PR_RunError ("Bad builtin call number %i for %s\n", i, funcname, remaphint);
+			}
+// 2001-09-14 Enhanced BuiltIn Function System (EBFS) by Maddes  end
 			pr_builtins[i] ();
 			break;
 		}

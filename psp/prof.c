@@ -24,7 +24,7 @@
 #include <pspthreadman.h>
 
 /** gmon.out file header */
-struct gmonhdr
+struct gmonhdr 
 {
         int lpc;        /* lowest pc address */
         int hpc;        /* highest pc address */
@@ -35,7 +35,7 @@ struct gmonhdr
 };
 
 /** frompc -> selfpc graph */
-struct rawarc
+struct rawarc 
 {
         unsigned int frompc;
         unsigned int selfpc;
@@ -43,7 +43,7 @@ struct rawarc
 };
 
 /** context */
-struct gmonparam
+struct gmonparam 
 {
         int state;
         unsigned int lowpc;
@@ -58,7 +58,7 @@ struct gmonparam
         unsigned int *samples;
 
         int timer;
-
+        
         unsigned int pc;
 };
 
@@ -101,7 +101,7 @@ static void initialize()
         gp.hashfraction = HISTFRACTION;
 
         gp.narcs = (gp.textsize + gp.hashfraction - 1) / gp.hashfraction;
-        gp.arcs = (struct rawarc *)Q_malloc(sizeof(struct rawarc) * gp.narcs);
+        gp.arcs = (struct rawarc *)malloc(sizeof(struct rawarc) * gp.narcs);
         if (gp.arcs == NULL)
         {
                 gp.state = GMON_PROF_ERROR;
@@ -109,7 +109,7 @@ static void initialize()
         }
 
         gp.nsamples = (gp.textsize + gp.hashfraction - 1) / gp.hashfraction;
-        gp.samples = (unsigned int *)Q_malloc(sizeof(unsigned int) * gp.nsamples);
+        gp.samples = (unsigned int *)malloc(sizeof(unsigned int) * gp.nsamples);
         if (gp.samples == NULL)
         {
                 free(gp.arcs);
@@ -126,13 +126,13 @@ static void initialize()
         SceKernelSysClock sc;
         sc.hi = 0;
         sc.low = SAMPLE_FREQ;
-
+        
         int thid = sceKernelGetThreadId();
-
+        
         SceKernelThreadInfo info;
         info.size = sizeof(info);
         int ret = sceKernelReferThreadStatus(thid, &info);
-
+        
         if(ret == 0)
         {
             void* timer_addr = timer_handler;
@@ -140,10 +140,10 @@ static void initialize()
             {
                 timer_addr += 0x80000000;
             }
-
+        
             ret = sceKernelSetVTimerHandler(gp.timer, &sc, timer_addr, NULL);
         }
-
+        
         if(ret == 0)
         {
             sceKernelStartVTimer(gp.timer);
@@ -152,7 +152,7 @@ static void initialize()
 
 /** Writes gmon.out dump file and stops profiling
 
-    Called from atexit() handler; will dump out a host:gmon.out file
+    Called from atexit() handler; will dump out a host:gmon.out file 
     with all collected information.
 */
 void gprof_cleanup()
@@ -201,11 +201,11 @@ void gprof_cleanup()
 
     Called from mcount.S to make life a bit easier. __mcount is called
     right before a function starts. GCC generates a tiny stub at the very
-    beginning of each compiled routine, which eventually brings the
-    control to here.
+    beginning of each compiled routine, which eventually brings the 
+    control to here. 
 */
 void __mcount(unsigned int frompc, unsigned int selfpc)
-{
+{ 
         int e;
         struct rawarc *arc;
 

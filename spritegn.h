@@ -17,7 +17,9 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
+//
 // spritegn.h: header file for sprite generation program
+//
 
 // **********************************************************
 // * This file must be identical in the spritegen directory *
@@ -56,8 +58,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #endif
 
-#define SPRITE_VERSION	1
-#define SPRITE32_VERSION        32 // Baker: ProQuake doesn't use this; JoeQuake does
+#define SPRITE_VERSION	        1
+#define SPRITEHL_VERSION	    2
+#define SPRITE32_VERSION        32
 
 // must match definition in modelgen.h
 #ifndef SYNCTYPE_T
@@ -78,11 +81,32 @@ typedef struct {
 	synctype_t	synctype;
 } dsprite_t;
 
+typedef struct
+{
+	int			ident;
+	int			version;
+	int			type;
+	int			texFormat;
+	float		boundingradius;
+	int			width;
+	int			height;
+	int			numframes;
+	float		beamlength;
+	synctype_t	synctype;
+} dspritehl_t;
+
 #define SPR_VP_PARALLEL_UPRIGHT		0
-#define SPR_FACING_UPRIGHT			1
-#define SPR_VP_PARALLEL				2
-#define SPR_ORIENTED				3
+#define SPR_FACING_UPRIGHT		1
+#define SPR_VP_PARALLEL			2
+#define SPR_ORIENTED		        3
 #define SPR_VP_PARALLEL_ORIENTED	4
+#define SPR_LABEL               	5
+#define SPR_LABEL_SCALE         	6
+
+#define SPR_NORMAL					0
+#define SPR_ADDITIVE				1
+#define SPR_INDEXALPHA				2
+#define SPR_ALPHATEST				3
 
 typedef struct {
 	int			origin[2];
@@ -104,5 +128,25 @@ typedef struct {
 	spriteframetype_t	type;
 } dspriteframetype_t;
 
-#define IDSPRITEHEADER	(('P'<<24)+('S'<<16)+('D'<<8)+'I') // little-endian "IDSP"
+#define IDSPRITEHEADER	(('P'<<24)+('S'<<16)+('D'<<8)+'I')
+														// little-endian "IDSP"
+														
+#define MAX_SKINNAME 64
+#define IDSPRITE2HEADER	(('2'<<24)+('S'<<16)+('D'<<8)+'I')
+		// little-endian "IDS2"
+#define SPRITE2_VERSION	2
+
+typedef struct
+{
+	int		width, height;
+	int		origin_x, origin_y;		// raster coordinates inside pic
+	char	name[MAX_SKINNAME];		// name of pcx file
+} dmd2sprframe_t;
+
+typedef struct {
+	int			ident;
+	int			version;
+	int			numframes;
+	dmd2sprframe_t	frames[1];			// variable sized
+} dmd2sprite_t;
 

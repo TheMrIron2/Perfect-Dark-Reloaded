@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -17,12 +17,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
-// common.h  -- general definitions
-
-#ifndef COMMON_H
-#define COMMON_H
-
-
+// comndef.h  -- general definitions
 
 #if !defined BYTE_DEFINED
 typedef unsigned char 		byte;
@@ -32,25 +27,20 @@ typedef unsigned char 		byte;
 #undef true
 #undef false
 
-#if defined(PSP) && defined(__cplusplus)
+#ifdef __cplusplus
 typedef enum {qfalse, qtrue}	qboolean;
 #else
 typedef enum {false, true}	qboolean;
 #endif
 
-#ifndef NULL
-#define NULL ((void *)0)
+#ifndef fmin
+#define fmin(a, b) ((a) < (b) ? (a) : (b))
 #endif
 
-
-#ifndef QMIN
-#define QMIN(a, b) ((a) < (b) ? (a) : (b))
-#endif
-#ifndef QMAX
-#define QMAX(a, b) ((a) > (b) ? (a) : (b))
+#ifndef fmax
+#define fmax(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
-// by joe
 #define bound(a, b, c) ((a) >= (c) ? (a) : (b) < (a) ? (a) : (b) > (c) ? (c) : (b))
 
 //============================================================================
@@ -78,11 +68,11 @@ typedef struct link_s
 	struct link_s	*prev, *next;
 } link_t;
 
-// Baker: this stuff is static in sv_world.c
-//void ClearLink (link_t *l);
-//void RemoveLink (link_t *l);
-//void InsertLinkBefore (link_t *l, link_t *before);
-//void InsertLinkAfter (link_t *l, link_t *after);
+
+void ClearLink (link_t *l);
+void RemoveLink (link_t *l);
+void InsertLinkBefore (link_t *l, link_t *before);
+void InsertLinkAfter (link_t *l, link_t *after);
 
 // (type *)STRUCT_FROM_LINK(link_t *link, type, member)
 // ent = STRUCT_FROM_LINK(link,entity_t,order)
@@ -91,17 +81,25 @@ typedef struct link_s
 
 //============================================================================
 
-#define Q_MAXCHAR ((char)0x7f)
+#ifndef NULL
+#define NULL ((void *)0)
+#endif
+
+#define Q_MAXCHAR  ((char)0x7f)
 #define Q_MAXSHORT ((short)0x7fff)
-#define Q_MAXINT	((int)0x7fffffff)
-#define Q_MAXLONG ((int)0x7fffffff)
+#define Q_MAXINT   ((int)0x7fffffff)
+#define Q_MAXLONG  ((int)0x7fffffff)
 #define Q_MAXFLOAT ((int)0x7fffffff)
 
-#define Q_MINCHAR ((char)0x80)
+#define Q_MINCHAR  ((char)0x80)
 #define Q_MINSHORT ((short)0x8000)
-#define Q_MININT 	((int)0x80000000)
-#define Q_MINLONG ((int)0x80000000)
+#define Q_MININT   ((int)0x80000000)
+#define Q_MINLONG  ((int)0x80000000)
 #define Q_MINFLOAT ((int)0x7fffffff)
+
+
+
+#define	MAX_TOKEN_CHARS		128		// max length of an individual token
 
 //============================================================================
 
@@ -124,10 +122,6 @@ void MSG_WriteFloat (sizebuf_t *sb, float f);
 void MSG_WriteString (sizebuf_t *sb, char *s);
 void MSG_WriteCoord (sizebuf_t *sb, float f);
 void MSG_WriteAngle (sizebuf_t *sb, float f);
-void MSG_WritePreciseAngle (sizebuf_t *sb, float f); // JPG - precise aim!!
-#ifdef FITZQUAKE_PROTOCOL
-void MSG_WriteAngle16 (sizebuf_t *sb, float f); //johnfitz
-#endif
 
 extern	int			msg_readcount;
 extern	qboolean	msg_badread;		// set if a read goes beyond end of message
@@ -135,9 +129,6 @@ extern	qboolean	msg_badread;		// set if a read goes beyond end of message
 void MSG_BeginReading (void);
 int MSG_ReadChar (void);
 int MSG_ReadByte (void);
-#ifdef PROQUAKE_EXTENSION
-int MSG_PeekByte (void); // JPG - need this to check for ProQuake messages
-#endif
 int MSG_ReadShort (void);
 int MSG_ReadLong (void);
 float MSG_ReadFloat (void);
@@ -145,92 +136,30 @@ char *MSG_ReadString (void);
 
 float MSG_ReadCoord (void);
 float MSG_ReadAngle (void);
-float MSG_ReadPreciseAngle (void); // JPG - precise aim!!
-#ifdef FITZQUAKE_PROTOCOL
-float MSG_ReadAngle16 (void); //johnfitz
-#endif
 
 //============================================================================
-
-#ifdef _WIN32
-
-#undef snprintf
-#undef vsnprintf
-#define	vsnprintf _vsnprintf
-#define snprintf _snprintf
-
-// MSVC has a different name for several standard functions
-# define strcasecmp stricmp
-# define strncasecmp strnicmp
-#endif
-
-#ifdef BUILD_MP3_VERSION
-
-int		va_snprintf (char *function, char *buffer, size_t buffersize, const char *format, ...);
-int		va_vsnprintf (char *function, char *buffer, size_t buffersize, const char *format, va_list args);
-
-#endif
-
-
-int dpsnprintf (char *buffer, size_t buffersize, const char *format, ...);
-int dpvsnprintf (char *buffer, size_t buffersize, const char *format, va_list args);
-
-
-
-#if !defined(FLASH)
-
-char *strltrim(char *s);
-
-// strlcat and strlcpy, from OpenBSD
-// Most (all?) BSDs already have them
-#if defined(__OpenBSD__) || defined(__NetBSD__) || defined(__FreeBSD__) || defined(MACOSX)
-# define HAVE_STRLCAT 1
-# define HAVE_STRLCPY 1
-#endif
-
-#ifndef HAVE_STRLCAT
-/*
- * Appends src to string dst of size siz (unlike strncat, siz is the
- * full size of dst, not space left).  At most siz-1 characters
- * will be copied.  Always NUL terminates (unless siz <= strlen(dst)).
- * Returns strlen(src) + MIN(siz, strlen(initial dst)).
- * If retval >= siz, truncation occurred.
- */
-size_t strlcat(char *dst, const char *src, size_t siz);
-#endif  // #ifndef HAVE_STRLCAT
-
-#ifndef HAVE_STRLCPY
-/*
- * Copy src to string dst of size siz.  At most siz-1 characters
- * will be copied.  Always NUL terminates (unless siz == 0).
- * Returns strlen(src); if retval >= siz, truncation occurred.
- */
-size_t strlcpy(char *dst, const char *src, size_t siz);
-
-#endif  // #ifndef HAVE_STRLCPY
-
-#endif
-
-
-
-//void Q_strcpy (char *dest, char *src);
-//void Q_strncpy (char *dest, char *src, int count);
-
-
-//int Q_strcasecmp (char *s1, char *s2);
-//int Q_strncasecmp (char *s1, char *s2, int n);
-//int	Q_atoi (char *str);
-//float Q_atof (char *str);
-
-//void Q_strncpyz (char *dest, char *src, size_t size);
-//void Q_snprintfz (char *dest, size_t size, char *fmt, ...);
-//============================================================================
+void Q_strncpyz (char *dest, char *src, size_t size);
+void Q_snprintfz (char *dest, size_t size, char *fmt, ...);
+void Q_memset (void *dest, int fill, int count);
+void Q_memcpy (void *dest, void *src, int count);
+int Q_memcmp (void *m1, void *m2, int count);
+void Q_strcpy (char *dest, char *src);
+void Q_strncpy (char *dest, char *src, int count);
+int Q_strlen (char *str);
+char *Q_strrchr (char *s, char c);
+void Q_strcat (char *dest, char *src);
+int Q_strcmp (char *s1, char *s2);
+int Q_strncmp (char *s1, char *s2, int count);
+int Q_strcasecmp (char *s1, char *s2);
+int Q_strncasecmp (char *s1, char *s2, int n);
+int	Q_atoi (char *str);
+float Q_atof (char *str);
 
 extern	char		com_token[1024];
 extern	qboolean	com_eof;
 
 char *COM_Parse (char *data);
-
+char *COM_ParseQ2 (char **data_p);
 
 extern	int		com_argc;
 extern	char	**com_argv;
@@ -240,55 +169,38 @@ void COM_Init (char *path);
 void COM_InitArgv (int argc, char **argv);
 
 char *COM_SkipPath (char *pathname);
+char *COM_SkipPathWritable (char *pathname);
 void COM_StripExtension (char *in, char *out);
-char *COM_FileExtension (char *in);
 void COM_FileBase (char *in, char *out);
 void COM_DefaultExtension (char *path, char *extension);
 
 char	*va(char *format, ...);
+char *CopyString (char *in);
 // does a varargs printf into a temp buffer
-
-char *CopyString (char *s);
-
-//============================================================================
 
 extern int com_filesize;
 struct cache_user_s;
 
 extern	char	com_gamedir[MAX_OSPATH];
-extern char	com_basedir[MAX_OSPATH];
-
-void COM_ForceExtension (char *path, char *extension);	// by joe
-
+extern	char	com_savedir[MAX_OSPATH];
 void COM_WriteFile (char *filename, void *data, int len);
-
-void COM_CreatePath (char *path);
 int COM_OpenFile (char *filename, int *hndl);
 int COM_FOpenFile (char *filename, int *file);
 void COM_CloseFile (int h);
-
+void    COM_CreatePath (char *path);
+char *COM_FileExtension (char *in);
 byte *COM_LoadStackFile (char *path, void *buffer, int bufsize);
 byte *COM_LoadTempFile (char *path);
 byte *COM_LoadHunkFile (char *path);
+byte *COM_LoadFile (char *path, int usehunk);
 void COM_LoadCacheFile (char *path, struct cache_user_s *cu);
-#ifdef HTTP_DOWNLOAD
-void COM_GetFolder (char *in, char *out);//R00k
-#endif
-
-char *COM_Quakebar (int len);
-
+//============================================================================
+qboolean FS_FindFile (char *filename);
+int      FS_FOpenFile (char *filename, FILE **file);
+extern	char	com_netpath[MAX_OSPATH];
+//============================================================================
 
 extern	struct cvar_s	registered;
 
 extern qboolean		standard_quake, rogue, hipnotic;
-
-#ifdef SUPPORTS_KUROK
-extern qboolean		kurok;
-#endif
-extern qboolean		mod_deeplair, mod_conhide,  mod_nosoundwarn;
-
-extern void COM_ToLowerString(char *in, char *out);
-
-void R_PreMapLoad (char *mapname);
-
-#endif // COMMON_H
+extern qboolean   user_maps;

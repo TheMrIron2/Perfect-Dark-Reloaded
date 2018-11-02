@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 9.00
+# Visual C++ Express 2005
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Quake_PSP", "psp\Quake_PSP.vcproj", "{38B817AB-88C4-4ADA-8750-4187AB435363}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Quake_Win32Stubs", "win32_stubs\Quake_Win32Stubs.vcproj", "{D94197A6-9EAA-452A-AA05-652C940D70A3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		PSP|Win32 = PSP|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{38B817AB-88C4-4ADA-8750-4187AB435363}.Debug|Win32.ActiveCfg = PSP|Win32
+		{38B817AB-88C4-4ADA-8750-4187AB435363}.PSP|Win32.ActiveCfg = PSP|Win32
+		{38B817AB-88C4-4ADA-8750-4187AB435363}.PSP|Win32.Build.0 = PSP|Win32
+		{38B817AB-88C4-4ADA-8750-4187AB435363}.Release|Win32.ActiveCfg = PSP|Win32
+		{D94197A6-9EAA-452A-AA05-652C940D70A3}.Debug|Win32.ActiveCfg = Debug|Win32
+		{D94197A6-9EAA-452A-AA05-652C940D70A3}.Debug|Win32.Build.0 = Debug|Win32
+		{D94197A6-9EAA-452A-AA05-652C940D70A3}.PSP|Win32.ActiveCfg = Debug|Win32
+		{D94197A6-9EAA-452A-AA05-652C940D70A3}.Release|Win32.ActiveCfg = Release|Win32
+		{D94197A6-9EAA-452A-AA05-652C940D70A3}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

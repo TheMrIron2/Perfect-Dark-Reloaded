@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -23,7 +23,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 edict_t	*sv_player;
 
+extern	cvar_t	sv_friction;
 cvar_t	sv_edgefriction = {"edgefriction", "2"};
+extern	cvar_t	sv_stopspeed;
 
 static	vec3_t		forward, right, up;
 
@@ -41,10 +43,6 @@ usercmd_t	cmd;
 
 cvar_t	sv_idealpitchscale = {"sv_idealpitchscale","0.8"};
 
-#ifdef PROQUAKE_EXTENSION
-cvar_t	pq_fullpitch = {"pq_fullpitch", "0", true};	// JPG 2.01
-#endif
-cvar_t	sv_altnoclip = {"sv_altnoclip","1"}; //don't save to config ... no reason to do so
 
 /*
 ===============
@@ -54,14 +52,16 @@ SV_SetIdealPitch
 #define	MAX_FORWARD	6
 void SV_SetIdealPitch (void)
 {
-	float	angleval, sinval, cosval, z[MAX_FORWARD];
+	float	angleval, sinval, cosval;
 	trace_t	tr;
 	vec3_t	top, bottom;
-	int		i, j, step, dir, steps;
+	float	z[MAX_FORWARD];
+	int		i, j;
+	int		step, dir, steps;
 
 	if (!((int)sv_player->v.flags & FL_ONGROUND))
 		return;
-
+		
 	angleval = sv_player->v.angles[YAW] * M_PI*2 / 360;
 	sinval = sinf(angleval);
 	cosval = cosf(angleval);
@@ -71,21 +71,21 @@ void SV_SetIdealPitch (void)
 		top[0] = sv_player->v.origin[0] + cosval*(i+3)*12;
 		top[1] = sv_player->v.origin[1] + sinval*(i+3)*12;
 		top[2] = sv_player->v.origin[2] + sv_player->v.view_ofs[2];
-
+		
 		bottom[0] = top[0];
 		bottom[1] = top[1];
 		bottom[2] = top[2] - 160;
-
+		
 		tr = SV_Move (top, vec3_origin, vec3_origin, bottom, 1, sv_player);
 		if (tr.allsolid)
 			return;	// looking at a wall, leave ideal the way is was
 
 		if (tr.fraction == 1)
 			return;	// near a dropoff
-
+		
 		z[i] = top[2] + tr.fraction*(bottom[2]-top[2]);
 	}
-
+	
 	dir = 0;
 	steps = 0;
 	for (j=1 ; j<i ; j++)
@@ -97,16 +97,16 @@ void SV_SetIdealPitch (void)
 		if (dir && ( step-dir > ON_EPSILON || step-dir < -ON_EPSILON ) )
 			return;		// mixed changes
 
-		steps++;
+		steps++;	
 		dir = step;
 	}
-
+	
 	if (!dir)
 	{
 		sv_player->v.idealpitch = 0;
 		return;
 	}
-
+	
 	if (steps < 2)
 		return;
 	sv_player->v.idealpitch = -dir * sv_idealpitchscale.value;
@@ -116,16 +116,19 @@ void SV_SetIdealPitch (void)
 /*
 ==================
 SV_UserFriction
+
 ==================
 */
 void SV_UserFriction (void)
 {
-	float	*vel, speed, newspeed, control, friction;
+	float	*vel;
+	float	speed, newspeed, control;
 	vec3_t	start, stop;
+	float	friction;
 	trace_t	trace;
-
+	
 	vel = velocity;
-
+	
 	speed = sqrtf(vel[0]*vel[0] +vel[1]*vel[1]);
 	if (!speed)
 		return;
@@ -143,10 +146,10 @@ void SV_UserFriction (void)
 	else
 		friction = sv_friction.value;
 
-// apply friction
+// apply friction	
 	control = speed < sv_stopspeed.value ? sv_stopspeed.value : speed;
 	newspeed = speed - host_frametime*control*friction;
-
+	
 	if (newspeed < 0)
 		newspeed = 0;
 	newspeed /= speed;
@@ -163,6 +166,27 @@ SV_Accelerate
 */
 cvar_t	sv_maxspeed = {"sv_maxspeed", "320", false, true};
 cvar_t	sv_accelerate = {"sv_accelerate", "10"};
+#if 0
+void SV_Accelerate (vec3_t wishvel)
+{
+	int			i;
+	float		addspeed, accelspeed;
+	vec3_t		pushvec;
+
+	if (wishspeed == 0)
+		return;
+
+	VectorSubtract (wishvel, velocity, pushvec);
+	addspeed = VectorNormalize (pushvec);
+
+	accelspeed = sv_accelerate.value*host_frametime*addspeed;
+	if (accelspeed > addspeed)
+		accelspeed = addspeed;
+	
+	for (i=0 ; i<3 ; i++)
+		velocity[i] += accelspeed*pushvec[i];	
+}
+#endif
 void SV_Accelerate (void)
 {
 	int			i;
@@ -175,16 +199,16 @@ void SV_Accelerate (void)
 	accelspeed = sv_accelerate.value*host_frametime*wishspeed;
 	if (accelspeed > addspeed)
 		accelspeed = addspeed;
-
+	
 	for (i=0 ; i<3 ; i++)
-		velocity[i] += accelspeed*wishdir[i];
+		velocity[i] += accelspeed*wishdir[i];	
 }
 
 void SV_AirAccelerate (vec3_t wishveloc)
 {
 	int			i;
 	float		addspeed, wishspd, accelspeed, currentspeed;
-
+		
 	wishspd = VectorNormalize (wishveloc);
 	if (wishspd > 30)
 		wishspd = 30;
@@ -196,25 +220,19 @@ void SV_AirAccelerate (vec3_t wishveloc)
 	accelspeed = sv_accelerate.value*wishspeed * host_frametime;
 	if (accelspeed > addspeed)
 		accelspeed = addspeed;
-
+	
 	for (i=0 ; i<3 ; i++)
-		velocity[i] += accelspeed*wishveloc[i];
+		velocity[i] += accelspeed*wishveloc[i];	
 }
 
 
 void DropPunchAngle (void)
 {
 	float	len;
-
+	
 	len = VectorNormalize (sv_player->v.punchangle);
-
-#ifdef SUPPORTS_KUROK
-	if(kurok)
-		len -= 25*host_frametime;
-	else
-#endif
-		len -= 10*host_frametime;
-
+	
+	len -= 10*host_frametime;
 	if (len < 0)
 		len = 0;
 	VectorScale (sv_player->v.punchangle, len, sv_player->v.punchangle);
@@ -223,6 +241,7 @@ void DropPunchAngle (void)
 /*
 ===================
 SV_WaterMove
+
 ===================
 */
 void SV_WaterMove (void)
@@ -231,23 +250,20 @@ void SV_WaterMove (void)
 	vec3_t	wishvel;
 	float	speed, newspeed, wishspeed, addspeed, accelspeed;
 
+//
 // user intentions
+//
 	AngleVectors (sv_player->v.v_angle, forward, right, up);
 
 	for (i=0 ; i<3 ; i++)
 		wishvel[i] = forward[i]*cmd.forwardmove + right[i]*cmd.sidemove;
 
 	if (!cmd.forwardmove && !cmd.sidemove && !cmd.upmove)
-	{
-#ifdef SUPPORTS_KUROK
-        if (!kurok)
-#endif
-		    wishvel[2] -= 60;		// drift towards bottom
-    }
+		wishvel[2] -= 60;		// drift towards bottom
 	else
 		wishvel[2] += cmd.upmove;
 
-	wishspeed = VectorLength(wishvel);
+	wishspeed = Length(wishvel);
 	if (wishspeed > sv_maxspeed.value)
 	{
 		VectorScale (wishvel, sv_maxspeed.value/wishspeed, wishvel);
@@ -255,21 +271,23 @@ void SV_WaterMove (void)
 	}
 	wishspeed *= 0.7;
 
+//
 // water friction
-	speed = VectorLength (velocity);
+//
+	speed = Length (velocity);
 	if (speed)
 	{
 		newspeed = speed - host_frametime * speed * sv_friction.value;
 		if (newspeed < 0)
-			newspeed = 0;
+			newspeed = 0;	
 		VectorScale (velocity, newspeed/speed, velocity);
 	}
 	else
-	{
 		newspeed = 0;
-	}
-
+	
+//
 // water acceleration
+//
 	if (!wishspeed)
 		return;
 
@@ -288,7 +306,8 @@ void SV_WaterMove (void)
 
 void SV_WaterJump (void)
 {
-	if (sv.time > sv_player->v.teleport_time || !sv_player->v.waterlevel)
+	if (sv.time > sv_player->v.teleport_time
+	|| !sv_player->v.waterlevel)
 	{
 		sv_player->v.flags = (int)sv_player->v.flags & ~FL_WATERJUMP;
 		sv_player->v.teleport_time = 0;
@@ -297,32 +316,11 @@ void SV_WaterJump (void)
 	sv_player->v.velocity[1] = sv_player->v.movedir[1];
 }
 
-/*
-===================
-SV_NoclipMove -- johnfitz
-
-new, alternate noclip. old noclip is still handled in SV_AirMove
-===================
-*/
-void SV_NoclipMove (void)
-{
-	AngleVectors (sv_player->v.v_angle, forward, right, up);
-
-	velocity[0] = forward[0]*cmd.forwardmove + right[0]*cmd.sidemove;
-	velocity[1] = forward[1]*cmd.forwardmove + right[1]*cmd.sidemove;
-	velocity[2] = forward[2]*cmd.forwardmove + right[2]*cmd.sidemove;
-	velocity[2] += cmd.upmove*2; //doubled to match running speed
-
-	if (VectorLength (velocity) > sv_maxspeed.value)
-	{
-		VectorNormalize (velocity);
-		VectorScale (velocity, sv_maxspeed.value, velocity);
-	}
-}
 
 /*
 ===================
 SV_AirMove
+
 ===================
 */
 void SV_AirMove (void)
@@ -335,11 +333,11 @@ void SV_AirMove (void)
 
 	fmove = cmd.forwardmove;
 	smove = cmd.sidemove;
-
+	
 // hack to not let you back into teleporter
 	if (sv.time < sv_player->v.teleport_time && fmove < 0)
 		fmove = 0;
-
+		
 	for (i=0 ; i<3 ; i++)
 		wishvel[i] = forward[i]*fmove + right[i]*smove;
 
@@ -355,7 +353,7 @@ void SV_AirMove (void)
 		VectorScale (wishvel, sv_maxspeed.value/wishspeed, wishvel);
 		wishspeed = sv_maxspeed.value;
 	}
-
+	
 	if ( sv_player->v.movetype == MOVETYPE_NOCLIP)
 	{	// noclip
 		VectorCopy (wishvel, velocity);
@@ -368,7 +366,7 @@ void SV_AirMove (void)
 	else
 	{	// not on ground, so little effect on velocity
 		SV_AirAccelerate (wishvel);
-	}
+	}		
 }
 
 /*
@@ -385,23 +383,26 @@ void SV_ClientThink (void)
 
 	if (sv_player->v.movetype == MOVETYPE_NONE)
 		return;
-
+	
 	onground = (int)sv_player->v.flags & FL_ONGROUND;
 
 	origin = sv_player->v.origin;
 	velocity = sv_player->v.velocity;
 
 	DropPunchAngle ();
-
+	
+//
 // if dead, behave differently
+//
 	if (sv_player->v.health <= 0)
 		return;
 
+//
 // angles
 // show 1/3 the pitch angle and all the roll angle
 	cmd = host_client->cmd;
 	angles = sv_player->v.angles;
-
+	
 	VectorAdd (sv_player->v.v_angle, sv_player->v.punchangle, v_angle);
 	angles[ROLL] = V_CalcRoll (sv_player->v.angles, sv_player->v.velocity)*4;
 	if (!sv_player->v.fixangle)
@@ -415,15 +416,17 @@ void SV_ClientThink (void)
 		SV_WaterJump ();
 		return;
 	}
+//
 // walk
-	//johnfitz -- alternate noclip
-	if (sv_player->v.movetype == MOVETYPE_NOCLIP && sv_altnoclip.value)
-		SV_NoclipMove ();
-	else if (sv_player->v.waterlevel >= 2 && sv_player->v.movetype != MOVETYPE_NOCLIP)
+//
+	if ( (sv_player->v.waterlevel >= 2)
+	&& (sv_player->v.movetype != MOVETYPE_NOCLIP) )
+	{
 		SV_WaterMove ();
-	else
-	SV_AirMove ();
-	//johnfitz
+		return;
+	}
+
+	SV_AirMove ();	
 }
 
 
@@ -434,67 +437,39 @@ SV_ReadClientMove
 */
 void SV_ReadClientMove (usercmd_t *move)
 {
-	int		i, bits;
+	int		i;
 	vec3_t	angle;
-
+	int		bits;
+	
 // read ping time
-	host_client->ping_times[host_client->num_pings%NUM_PING_TIMES]	= sv.time - MSG_ReadFloat ();
+	host_client->ping_times[host_client->num_pings%NUM_PING_TIMES]
+		= sv.time - MSG_ReadFloat ();
 	host_client->num_pings++;
 
-// read current angles
-#ifdef FITZQUAKE_PROTOCOL
-	if (sv.protocol == PROTOCOL_FITZQUAKE)
-	{
-		for (i=0 ; i<3 ; i++)
-			angle[i] = MSG_ReadAngle16 ();
-	}
-	else
-#endif
-#ifdef PROQUAKE_EXTENSION
-	if (host_client->netconnection->mod == MOD_PROQUAKE) // JPG - precise aim for ProQuake!!
-	{
-		for (i=0 ; i<3 ; i++)
-			angle[i] = MSG_ReadPreciseAngle ();
-	}
-	else
-#endif
-	{
-		for (i=0 ; i<3 ; i++)
-			angle[i] = MSG_ReadAngle ();
-	}
-
-#ifdef PROQUAKE_EXTENSION
-	// JPG 2.01 - server-side fullpitch fix
-	if (!pq_fullpitch.value)
-	{
-		if (angle[PITCH] > 80 || angle[PITCH] < -70)
-		{
-			if (angle[PITCH] > 80)
-				angle[PITCH] = 80;
-			if (angle[PITCH] < -70)
-				angle[PITCH] = -70;
-
-			MSG_WriteByte (&host_client->message, svc_setangle);
-			for (i=0 ; i < 3 ; i++)
-				MSG_WriteAngle (&host_client->message, angle[i] );
-		}
-	}
-#endif
+// read current angles	
+	for (i=0 ; i<3 ; i++)
+		angle[i] = MSG_ReadAngle ();
 
 	VectorCopy (angle, host_client->edict->v.v_angle);
-
+		
 // read movement
 	move->forwardmove = MSG_ReadShort ();
 	move->sidemove = MSG_ReadShort ();
 	move->upmove = MSG_ReadShort ();
-
+	
 // read buttons
 	bits = MSG_ReadByte ();
 	host_client->edict->v.button0 = bits & 1;
 	host_client->edict->v.button2 = (bits & 2)>>1;
 
-	if ((i = MSG_ReadByte()))
+	i = MSG_ReadByte ();
+	if (i)
 		host_client->edict->v.impulse = i;
+
+#ifdef QUAKE2
+// read light level
+	host_client->edict->v.light_level = MSG_ReadByte ();
+#endif
 }
 
 /*
@@ -506,10 +481,12 @@ Returns false if the client should be killed
 */
 qboolean SV_ReadClientMessage (void)
 {
-	int		ret, cmd;
+	int		ret;
+	int		cmd;
 	char		*s;
-
-	do {
+	
+	do
+	{
 nextmsg:
 		ret = NET_GetMessage (host_client->netconnection);
 		if (ret == -1)
@@ -519,9 +496,9 @@ nextmsg:
 		}
 		if (!ret)
 			return true;
-
+					
 		MSG_BeginReading ();
-
+		
 		while (1)
 		{
 			if (!host_client->active)
@@ -531,72 +508,69 @@ nextmsg:
 			{
 				Sys_Printf ("SV_ReadClientMessage: badread\n");
 				return false;
-			}
-
+			}	
+	
 			cmd = MSG_ReadChar ();
-
+			
 			switch (cmd)
 			{
 			case -1:
 				goto nextmsg;		// end of message
-
+				
 			default:
 				Sys_Printf ("SV_ReadClientMessage: unknown command char\n");
 				return false;
-
+							
 			case clc_nop:
 //				Sys_Printf ("clc_nop\n");
 				break;
-
-			case clc_stringcmd:
+				
+			case clc_stringcmd:	
 				s = MSG_ReadString ();
 				if (host_client->privileged)
 					ret = 2;
 				else
 					ret = 0;
-				if (strncasecmp(s, "status", 6) == 0)
+				if (Q_strncasecmp(s, "status", 6) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "god", 3) == 0)
+				else if (Q_strncasecmp(s, "god", 3) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "notarget", 8) == 0)
+				else if (Q_strncasecmp(s, "notarget", 8) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "fly", 3) == 0)
+				else if (Q_strncasecmp(s, "fly", 3) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "name", 4) == 0)
+				else if (Q_strncasecmp(s, "name", 4) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "noclip", 6) == 0)
+				else if (Q_strncasecmp(s, "noclip", 6) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "say", 3) == 0)
+				else if (Q_strncasecmp(s, "say", 3) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "say_team", 8) == 0)
+				else if (Q_strncasecmp(s, "say_team", 8) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "tell", 4) == 0)
+				else if (Q_strncasecmp(s, "tell", 4) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "color", 5) == 0)
+				else if (Q_strncasecmp(s, "color", 5) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "kill", 4) == 0)
+				else if (Q_strncasecmp(s, "kill", 4) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "pause", 5) == 0)
+				else if (Q_strncasecmp(s, "pause", 5) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "spawn", 5) == 0)
+				else if (Q_strncasecmp(s, "spawn", 5) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "begin", 5) == 0)
+				else if (Q_strncasecmp(s, "begin", 5) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "prespawn", 8) == 0)
+				else if (Q_strncasecmp(s, "prespawn", 8) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "kick", 4) == 0)
+				else if (Q_strncasecmp(s, "kick", 4) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "ping", 4) == 0)
+				else if (Q_strncasecmp(s, "ping", 4) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "give", 4) == 0)
+				else if (Q_strncasecmp(s, "give", 4) == 0)
 					ret = 1;
-				else if (strncasecmp(s, "ban", 3) == 0)
+				else if (Q_strncasecmp(s, "ban", 3) == 0)
 					ret = 1;
-#ifdef QCEXEC
-				else if (strncasecmp(s, "qcexec", 6) == 0)
-					 ret = 1;
-#endif
-
+				else if (Q_strncasecmp(s, "qcexec", 6) == 0)
+					ret = 1;	
 				if (ret == 2)
 					Cbuf_InsertText (s);
 				else if (ret == 1)
@@ -604,24 +578,22 @@ nextmsg:
 				else
 					Con_DPrintf("%s tried to %s\n", host_client->name, s);
 				break;
-
+				
 			case clc_disconnect:
 //				Sys_Printf ("SV_ReadClientMessage: client disconnected\n");
 				return false;
-
+			
 			case clc_move:
 				SV_ReadClientMove (&host_client->cmd);
 				break;
 			}
 		}
 	} while (ret == 1);
-
+	
 	return true;
 }
 
-#ifdef PSP_MP3_SUPPORT
-extern qboolean bmg_type_changed;
-#endif
+
 /*
 ==================
 SV_RunClients
@@ -630,12 +602,12 @@ SV_RunClients
 void SV_RunClients (void)
 {
 	int				i;
-
+	
 	for (i=0, host_client = svs.clients ; i<svs.maxclients ; i++, host_client++)
 	{
 		if (!host_client->active)
 			continue;
-
+	
 		sv_player = host_client->edict;
 
 		if (!SV_ReadClientMessage ())
@@ -653,23 +625,7 @@ void SV_RunClients (void)
 
 // always pause in single player if in console or menus
 		if (!sv.paused && (svs.maxclients > 1 || key_dest == key_game) )
-		{
 			SV_ClientThink ();
-#ifdef PSP_MP3_SUPPORT
-			if(kurok)
-			{
-                Cvar_SetStringByRef (&bgmtype, "cd");
-                bmg_type_changed = true;
-			}
-		}
-		else
-		{
-		    if(kurok)
-		    {
-                Cvar_SetStringByRef (&bgmtype,"none");
-                bmg_type_changed = true;
-		    }
-#endif
-		}
 	}
 }
+

@@ -25,6 +25,8 @@ extern "C"
 #include "../quakedef.h"
 }
 
+extern cvar_t show_bat;
+
 #include "battery.hpp"
 
 namespace quake
@@ -43,6 +45,9 @@ namespace quake
 				// Don't report anything.
 				return;
 			}
+
+			if (show_bat.value)
+		        return;
 
 			// Get the new battery status.
 			const int	level		= scePowerGetBatteryLifePercent();

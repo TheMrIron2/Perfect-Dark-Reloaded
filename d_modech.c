@@ -42,7 +42,8 @@ void D_Patch (void)
 
 	if (!protectset8)
 	{
-		Sys_MakeCodeWriteable ((int)D_PolysetAff8Start, (int)D_PolysetAff8End - (int)D_PolysetAff8Start);
+		Sys_MakeCodeWriteable ((int)D_PolysetAff8Start,
+						     (int)D_PolysetAff8End - (int)D_PolysetAff8Start);
 		protectset8 = true;
 	}
 

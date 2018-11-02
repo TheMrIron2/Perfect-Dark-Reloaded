@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -25,12 +25,12 @@ key up events are sent even if in console mode
 
 */
 
-#define		HISTORY_FILE_NAME	"id1/proquake_history.txt"
 
-#define		MAXCMDLINE	256
-#define		CMDLINES	64
+#define      HISTORY_FILE_NAME   "dquake/dquake_log"
+#define      MAXCMDLINE   256
+#define      CMDLINES   32
 
-char	key_lines[CMDLINES][MAXCMDLINE];
+char   key_lines[CMDLINES][MAXCMDLINE];
 int		key_linepos;
 int		shift_down=false;
 int		key_lastpress;
@@ -48,19 +48,6 @@ qboolean	menubound[256];	// if true, can't be rebound while in menu
 int		keyshift[256];		// key to map to if shift held down in console
 int		key_repeats[256];	// if > 1, it is autorepeating
 qboolean	keydown[256];
-
-#ifdef SUPPORTS_GLVIDEOMODE_SWITCH
-cvar_t		cl_key_altenter = {"cl_key_altenter", "1", true}; // Baker 3.99q: allows user to disable new ALT-ENTER behavior
-#endif
-
-#ifdef SUPPORTS_INTERNATIONAL_KEYBOARD
-static qboolean key_international = true;
-cvar_t		in_keymap = {"in_keymap", "1", true};
-#else
-static qboolean key_international = false;
-#endif
-
-
 
 void Con_OSK_f (char *input, char *output, int outlen);
 void Con_SetOSKActive(qboolean active);
@@ -88,7 +75,7 @@ keyname_t keynames[] =
 	{"ALT", K_ALT},
 	{"CTRL", K_CTRL},
 	{"SHIFT", K_SHIFT},
-
+	
 	{"F1", K_F1},
 	{"F2", K_F2},
 	{"F3", K_F3},
@@ -109,16 +96,12 @@ keyname_t keynames[] =
 	{"HOME", K_HOME},
 	{"END", K_END},
 
-	{"PAUSE", K_PAUSE},
-
-	{"MWHEELUP", K_MWHEELUP},
-	{"MWHEELDOWN", K_MWHEELDOWN},
 	{"MOUSE1", K_MOUSE1},
 	{"MOUSE2", K_MOUSE2},
 	{"MOUSE3", K_MOUSE3},
 
-#ifdef PSP_BUTTON_CONTROLS
-	{"TRIANGLE", K_JOY1},
+#ifdef PSP
+    {"TRIANGLE", K_JOY1},
 	{"CIRCLE", K_JOY2},
 	{"CROSS", K_JOY3},
 	{"SQUARE", K_JOY4},
@@ -129,7 +112,7 @@ keyname_t keynames[] =
 	{"JOY4", K_JOY4},
 #endif
 
-#ifdef PSP_BUTTON_CONTROLS
+#ifdef PSP
 	{"LTRIGGER", K_AUX1},
 	{"RTRIGGER", K_AUX2},
 #else
@@ -167,6 +150,10 @@ keyname_t keynames[] =
 	{"AUX31", K_AUX31},
 	{"AUX32", K_AUX32},
 
+	{"PAUSE", K_PAUSE},
+
+	{"MWHEELUP", K_MWHEELUP},
+	{"MWHEELDOWN", K_MWHEELDOWN},
 
 	{"SEMICOLON", ';'},	// because a raw semicolon seperates commands
 
@@ -196,18 +183,18 @@ void Key_Console (int key)
 {
 	char	*cmd;
 
-#ifdef PSP_ONSCREEN_KEYBOARD
+#ifdef PSP
 	if (Con_isSetOSKActive()) {
 		if (key == K_JOY1)
-			Con_OSK_Key (K_DEL);
+			Con_OSK_Key (K_DEL); 
 		else if (key == K_JOY2)
-			Con_OSK_Key (K_ESCAPE);
+			Con_OSK_Key (K_ESCAPE); 
 		else if (key == K_JOY3)
-			Con_OSK_Key (K_ENTER);
+			Con_OSK_Key (K_ENTER); 
 		else if (key == K_JOY4)
-			Con_OSK_Key (K_INS);
-		else
-			Con_OSK_Key (key);
+			Con_OSK_Key (K_INS); 
+		else 
+			Con_OSK_Key (key);		
 		return;
 	}
 
@@ -225,7 +212,7 @@ void Key_Console (int key)
 		Cbuf_AddText (key_lines[edit_line]+1);	// skip the >
 		Cbuf_AddText ("\n");
 		Con_Printf ("%s\n",key_lines[edit_line]);
-		edit_line = (edit_line + 1) & (CMDLINES-1);
+		edit_line = (edit_line + 1) & 31;
 		history_line = edit_line;
 		key_lines[edit_line][0] = ']';
 		key_linepos = 1;
@@ -235,7 +222,7 @@ void Key_Console (int key)
 		return;
 	}
 
-
+	
 
 	if (key == K_TAB || key == K_RIGHTARROW)
 	{	// command completion
@@ -244,15 +231,15 @@ void Key_Console (int key)
 			cmd = Cvar_CompleteVariable (key_lines[edit_line]+1);
 		if (cmd)
 		{
-			strcpy (key_lines[edit_line]+1, cmd);
-			key_linepos = strlen(cmd)+1;
+			Q_strcpy (key_lines[edit_line]+1, cmd);
+			key_linepos = Q_strlen(cmd)+1;
 			key_lines[edit_line][key_linepos] = ' ';
 			key_linepos++;
 			key_lines[edit_line][key_linepos] = 0;
 			return;
 		}
 	}
-
+	
 	if (key == K_BACKSPACE || key == K_LEFTARROW)
 	{
 		if (key_linepos > 1)
@@ -264,26 +251,25 @@ void Key_Console (int key)
 	{
 		do
 		{
-			history_line = (history_line - 1) & (CMDLINES-1);
+			history_line = (history_line - 1) & 31;
 		} while (history_line != edit_line
 				&& !key_lines[history_line][1]);
 		if (history_line == edit_line)
 			history_line = (edit_line+1)&31;
-		strcpy(key_lines[edit_line], key_lines[history_line]);
-		key_linepos = strlen(key_lines[edit_line]);
+		Q_strcpy(key_lines[edit_line], key_lines[history_line]);
+		key_linepos = Q_strlen(key_lines[edit_line]);
 		return;
 	}
 
 	if (key == K_DOWNARROW)
 	{
-		if (history_line == edit_line)
-			return;
+		if (history_line == edit_line) return;
 		do
 		{
-			history_line = (history_line + 1) & (CMDLINES-1);
+			history_line = (history_line + 1) & 31;
 		}
-		while (history_line != edit_line && !key_lines[history_line][1]);
-
+		while (history_line != edit_line
+			&& !key_lines[history_line][1]);
 		if (history_line == edit_line)
 		{
 			key_lines[edit_line][0] = ']';
@@ -291,8 +277,8 @@ void Key_Console (int key)
 		}
 		else
 		{
-			strcpy(key_lines[edit_line], key_lines[history_line]);
-			key_linepos = strlen(key_lines[edit_line]);
+			Q_strcpy(key_lines[edit_line], key_lines[history_line]);
+			key_linepos = Q_strlen(key_lines[edit_line]);
 		}
 		return;
 	}
@@ -324,10 +310,10 @@ void Key_Console (int key)
 		con_backscroll = 0;
 		return;
 	}
-
+	
 	if (key < 32 || key > 127)
 		return;	// non printable
-
+		
 	if (key_linepos < MAXCMDLINE-1)
 	{
 		key_lines[edit_line][key_linepos] = key;
@@ -345,32 +331,6 @@ qboolean team_message = false;
 void Key_Message (int key)
 {
 	static int chat_bufferlen = 0;
-
-/*
-#ifdef PSP_ONSCREEN_KEYBOARD
-	if (Con_isSetOSKActive()) {
-		if (key == K_JOY1)
-			Con_OSK_Key (K_DEL);
-		else if (key == K_JOY2)
-			Con_OSK_Key (K_ESCAPE);
-		else if (key == K_JOY3)
-			Con_OSK_Key (K_ENTER);
-		else if (key == K_JOY4)
-			Con_OSK_Key (K_INS);
-		else
-			Con_OSK_Key (key);
-		return;
-	}
-
-	if ( key == K_JOY4 || key == K_INS)
-	{
-		consoleOskDone = false;
-		Con_SetOSKActive(true);
-		Con_OSK_f(key_lines[edit_line]+1, consoleInput, 72);
-		return;
-	}
-#endif
-*/
 
 	if (key == K_ENTER)
 	{
@@ -430,15 +390,15 @@ the K_* names are matched up.
 int Key_StringToKeynum (char *str)
 {
 	keyname_t	*kn;
-
+	
 	if (!str || !str[0])
 		return -1;
-
 	if (!str[1])
 		return str[0];
 
-	for (kn=keynames ; kn->name ; kn++) {
-		if (!strcasecmp(str,kn->name))
+	for (kn=keynames ; kn->name ; kn++)
+	{
+		if (!Q_strcasecmp(str,kn->name))
 			return kn->keynum;
 	}
 	return -1;
@@ -455,19 +415,18 @@ FIXME: handle quote special (general escape sequence?)
 */
 char *Key_KeynumToString (int keynum)
 {
-	keyname_t	*kn;
+	keyname_t	*kn;	
 	static	char	tinystr[2];
-
+	
 	if (keynum == -1)
 		return "<KEY NOT FOUND>";
-
 	if (keynum > 32 && keynum < 127)
 	{	// printable ascii
 		tinystr[0] = keynum;
 		tinystr[1] = 0;
 		return tinystr;
 	}
-
+	
 	for (kn=keynames ; kn->name ; kn++)
 		if (keynum == kn->keynum)
 			return kn->name;
@@ -485,22 +444,23 @@ void Key_SetBinding (int keynum, char *binding)
 {
 	char	*new;
 	int		l;
-
+			
 	if (keynum == -1)
 		return;
 
 // free old bindings
-	if (keybindings[keynum]) {
+	if (keybindings[keynum])
+	{
 		Z_Free (keybindings[keynum]);
 		keybindings[keynum] = NULL;
 	}
-
+			
 // allocate memory for new binding
-	l = strlen (binding);
+	l = Q_strlen (binding);	
 	new = Z_Malloc (l+1);
-	strcpy (new, binding);
+	Q_strcpy (new, binding);
 	new[l] = 0;
-	keybindings[keynum] = new;
+	keybindings[keynum] = new;	
 }
 
 /*
@@ -514,10 +474,10 @@ void Key_Unbind_f (void)
 
 	if (Cmd_Argc() != 2)
 	{
-		Con_Printf ("Usage: %s <key> : remove commands from a key\n", Cmd_Argv(0));
+		Con_Printf ("unbind <key> : remove commands from a key\n");
 		return;
 	}
-
+	
 	b = Key_StringToKeynum (Cmd_Argv(1));
 	if (b==-1)
 	{
@@ -531,31 +491,12 @@ void Key_Unbind_f (void)
 void Key_Unbindall_f (void)
 {
 	int		i;
-
+	
 	for (i=0 ; i<256 ; i++)
 		if (keybindings[i])
 			Key_SetBinding (i, "");
 }
 
-/*
-============
-Key_Bindlist_f -- johnfitz
-============
-*/
-void Key_Bindlist_f (void)
-{
-	int		i, count;
-
-	count = 0;
-	for (i=0 ; i<256 ; i++)
-		if (keybindings[i])
-			if (*keybindings[i])
-			{
-				Con_SafePrintf ("   %s \"%s\"\n", Key_KeynumToString(i), keybindings[i]);
-				count++;
-			}
-	Con_SafePrintf ("%i bindings\n", count);
-}
 
 /*
 ===================
@@ -566,7 +507,7 @@ void Key_Bind_f (void)
 {
 	int			i, c, b;
 	char		cmd[1024];
-
+	
 	c = Cmd_Argc();
 
 	if (c != 2 && c != 3)
@@ -589,14 +530,14 @@ void Key_Bind_f (void)
 			Con_Printf ("\"%s\" is not bound\n", Cmd_Argv(1) );
 		return;
 	}
-
+	
 // copy the rest of the command line
 	cmd[0] = 0;		// start out with a null string
 	for (i=2 ; i< c ; i++)
 	{
 		if (i > 2)
-			strlcat (cmd, " ", sizeof(cmd));
-		strlcat (cmd, Cmd_Argv(i), sizeof(cmd));
+			strcat (cmd, " ");
+		strcat (cmd, Cmd_Argv(i));
 	}
 
 	Key_SetBinding (b, cmd);
@@ -613,7 +554,6 @@ void Key_WriteBindings (FILE *f)
 {
 	int		i;
 
-	fprintf (f, "\n// Key bindings\n\n");
 	for (i=0 ; i<256 ; i++)
 		if (keybindings[i])
 			if (*keybindings[i])
@@ -621,65 +561,64 @@ void Key_WriteBindings (FILE *f)
 }
 
 
-
-// Added by VVD {
 void History_Init (void)
 {
-	int i, c;
-	FILE *hf;
+   int i, c;
+   FILE *hf;
 
-	for (i = 0; i < CMDLINES; i++) {
-		key_lines[i][0] = ']';
-		key_lines[i][1] = 0;
-	}
-	key_linepos = 1;
+   for (i = 0; i < CMDLINES; i++) {
+      key_lines[i][0] = ']';
+      key_lines[i][1] = 0;
+   }
+   key_linepos = 1;
 
-//	if (cl_savehistory.value)
-		if ((hf = fopen(HISTORY_FILE_NAME, "rt")))
-		{
-			do
-			{
-				i = 1;
-				do
-				{
-					c = fgetc(hf);
-					key_lines[edit_line][i++] = c;
-				} while (c != '\n' && c != EOF && i < MAXCMDLINE);
-				key_lines[edit_line][i - 1] = 0;
-				edit_line = (edit_line + 1) & (CMDLINES - 1);
-			} while (c != EOF && edit_line < CMDLINES);
-			fclose(hf);
+//   if (cl_savehistory.value)
+      if ((hf = fopen(HISTORY_FILE_NAME, "rt")))
+      {
+         do
+         {
+            i = 1;
+            do
+            {
+               c = fgetc(hf);
+               key_lines[edit_line][i++] = c;
+            } while (c != '\n' && c != EOF && i < MAXCMDLINE);
+            key_lines[edit_line][i - 1] = 0;
+            edit_line = (edit_line + 1) & (CMDLINES - 1);
+         } while (c != EOF && edit_line < CMDLINES);
+         fclose(hf);
 
-			history_line = edit_line = (edit_line - 1) & (CMDLINES - 1);
-			key_lines[edit_line][0] = ']';
-			key_lines[edit_line][1] = 0;
-		}
+         history_line = edit_line = (edit_line - 1) & (CMDLINES - 1);
+         key_lines[edit_line][0] = ']';
+         key_lines[edit_line][1] = 0;
+      }
 }
 
 void History_Shutdown (void)
 {
-	int i;
-	FILE *hf;
+   int i;
+   FILE *hf;
 
-//	if (cl_savehistory.value)
-		if ((hf = fopen(HISTORY_FILE_NAME, "wt")))
-		{
-			i = edit_line;
-			do
-			{
-				i = (i + 1) & (CMDLINES - 1);
-			} while (i != edit_line && !key_lines[i][1]);
+//   if (cl_savehistory.value)
+      if ((hf = fopen(HISTORY_FILE_NAME, "wt")))
+      {
+         i = edit_line;
+         do
+         {
+            i = (i + 1) & (CMDLINES - 1);
+         } while (i != edit_line && !key_lines[i][1]);
 
-			do
-			{
-				// fprintf(hf, "%s\n", wcs2str(key_lines[i] + 1));
-				fprintf(hf, "%s\n", key_lines[i] + 1);
-				i = (i + 1) & (CMDLINES - 1);
-			} while (i != edit_line && key_lines[i][1]);
-			fclose(hf);
-		}
+         do
+         {
+            // fprintf(hf, "%s\n", wcs2str(key_lines[i] + 1)); // Baker: I commented this line out because byte colored text isn't a feature in most ordinary engines
+            fprintf(hf, "%s\n", key_lines[i] + 1);
+            i = (i + 1) & (CMDLINES - 1);
+         } while (i != edit_line && key_lines[i][1]);
+         fclose(hf);
+      }
 }
-// } Added by VVD
+
+
 
 /*
 ===================
@@ -690,9 +629,9 @@ void Key_Init (void)
 {
 	int		i;
 
-	History_Init ();
+History_Init ();
 
-#if 0
+#if 0 // This section of code is now done in History_Init
 	for (i=0 ; i<32 ; i++)
 	{
 		key_lines[i][0] = ']';
@@ -700,10 +639,12 @@ void Key_Init (void)
 	}
 	key_linepos = 1;
 #endif
-
+	
+//
 // init ascii characters in console mode
+//
 	for (i=32 ; i<128 ; i++)
-		consolekeys[i] = true;
+	consolekeys[i] = true;
 	consolekeys[K_ENTER] = true;
 	consolekeys[K_TAB] = true;
 	consolekeys[K_LEFTARROW] = true;
@@ -711,7 +652,6 @@ void Key_Init (void)
 	consolekeys[K_UPARROW] = true;
 	consolekeys[K_DOWNARROW] = true;
 	consolekeys[K_BACKSPACE] = true;
-	consolekeys[K_INS] = true;
 	consolekeys[K_PGUP] = true;
 	consolekeys[K_PGDN] = true;
 	consolekeys[K_SHIFT] = true;
@@ -719,8 +659,8 @@ void Key_Init (void)
 	consolekeys[K_MWHEELDOWN] = true;
 	consolekeys['`'] = false;
 	consolekeys['~'] = false;
-#ifdef PSP_BUTTON_CONTROLS
-	
+#ifdef PSP
+	consolekeys[K_INS] = true;
 	consolekeys[K_JOY1] = true;
 	consolekeys[K_JOY2] = true;
 	consolekeys[K_JOY3] = true;
@@ -757,11 +697,9 @@ void Key_Init (void)
 	for (i=0 ; i<12 ; i++)
 		menubound[K_F1+i] = true;
 
+//
 // register our functions
-#ifdef SUPPORTS_GLVIDEOMODE_SWITCH
-	Cvar_RegisterVariable(&cl_key_altenter, NULL);
-#endif
-	Cmd_AddCommand ("bindlist",Key_Bindlist_f); //johnfitz
+//
 	Cmd_AddCommand ("bind",Key_Bind_f);
 	Cmd_AddCommand ("unbind",Key_Unbind_f);
 	Cmd_AddCommand ("unbindall",Key_Unbindall_f);
@@ -782,37 +720,35 @@ void Key_Event (int key, qboolean down)
 	char	*kb;
 	char	cmd[1024];
 
-//	keydown[key] = down;
-
-#ifdef PSP_ONSCREEN_KEYBOARD
-	if (Con_isSetOSKActive() && down)
-	{
-		if (key == K_JOY1)
-			Con_OSK_Key (K_DEL);
-		else if (key == K_JOY2)
-			Con_OSK_Key (K_ESCAPE);
-		else if (key == K_JOY3)
-			Con_OSK_Key (K_ENTER);
-		else if (key == K_JOY4)
-			Con_OSK_Key (K_INS);
-		else
-			Con_OSK_Key (key);
-
-		if (!Con_isSetOSKActive())
-		{
-			consoleOskDone = true;
-			strcpy(key_lines[edit_line]+1, consoleInput);
-			key_linepos = strlen(key_lines[edit_line]);
-			consoleOskDone = false;
-			consoleInput[0] = 0;
-		}
-
-		return;
-	}
-#endif
-
 	keydown[key] = down;
 
+#ifdef PSP
+	if (Con_isSetOSKActive() && down) {
+		if (key == K_JOY1)
+			Con_OSK_Key (K_DEL); 
+		else if (key == K_JOY2)
+			Con_OSK_Key (K_ESCAPE); 
+		else if (key == K_JOY3)
+			Con_OSK_Key (K_ENTER); 
+		else if (key == K_JOY4)
+			Con_OSK_Key (K_INS); 
+		else 
+			Con_OSK_Key (key);
+			
+		if (!Con_isSetOSKActive()) {
+			consoleOskDone = true;
+			strcpy(key_lines[edit_line]+1, consoleInput);
+			key_linepos = Q_strlen(key_lines[edit_line]);
+			consoleOskDone = false;
+			consoleInput[0] = 0;
+			return;
+
+		}
+		else 	{		
+			return;
+		}
+	}
+#endif
 	if (!down)
 		key_repeats[key] = 0;
 
@@ -827,26 +763,25 @@ void Key_Event (int key, qboolean down)
 	if (down)
 	{
 		key_repeats[key]++;
-//		if (key_repeats[key] > 1) && (key != L_TRIGGER && key != R_TRIGGER) & !con_forcedup)
-		if ((key_repeats[key] > 1) && ((key != K_AUX1 && key != K_AUX2) || ((key_dest == key_game) && !con_forcedup)))  // JPG 1.05 - added K_PGUP, K_PGDN, K_TAB and check to make sure that key_dest isn't key_game  // JPG 3.02 - added con_forcedup check
+		if (key != K_BACKSPACE && key != K_PAUSE && key_repeats[key] > 1)
 		{
 			return;	// ignore most autorepeats
 		}
-
-#define DEFAULT_MENU_KEY "F4"
-#ifdef PSP
-#undef DEFAULT_MENU_KEY
-#define DEFAULT_MENU_KEY "START"
-#endif
+			
 		if (key >= 200 && !keybindings[key])
-			Con_Printf ("%s is unbound, hit %s to set.\n", Key_KeynumToString (key), DEFAULT_MENU_KEY);
-
+#ifdef PSP
+			Con_Printf ("%s is unbound, hit START to set.\n", Key_KeynumToString (key) );
+#else
+			Con_Printf ("%s is unbound, hit F4 to set.\n", Key_KeynumToString (key) );
+#endif
 	}
 
 	if (key == K_SHIFT)
 		shift_down = down;
 
+//
 // handle escape specialy, so the user can never unbind it
+//
 	if (key == K_ESCAPE)
 	{
 		if (!down)
@@ -856,33 +791,32 @@ void Key_Event (int key, qboolean down)
 		case key_message:
 			Key_Message (key);
 			break;
-
 		case key_menu:
 			M_Keydown (key);
 			break;
-
 		case key_game:
 		case key_console:
 			M_ToggleMenu_f ();
 			break;
-
 		default:
 			Sys_Error ("Bad key_dest");
 		}
 		return;
 	}
 
+//
 // key up events only generate commands if the game key binding is
 // a button command (leading + sign).  These will occur even in console mode,
 // to keep the character from continuing an action started before a console
 // switch.  Button commands include the kenum as a parameter, so multiple
 // downs can be matched with ups
+//
 	if (!down)
 	{
 		kb = keybindings[key];
 		if (kb && kb[0] == '+')
 		{
-			snprintf(cmd, sizeof(cmd),  "-%s %i\n", kb+1, key);
+			sprintf (cmd, "-%s %i\n", kb+1, key);
 			Cbuf_AddText (cmd);
 		}
 		if (keyshift[key] != key)
@@ -890,7 +824,7 @@ void Key_Event (int key, qboolean down)
 			kb = keybindings[keyshift[key]];
 			if (kb && kb[0] == '+')
 			{
-				snprintf(cmd, sizeof(cmd),  "-%s %i\n", kb+1, key);
+				sprintf (cmd, "-%s %i\n", kb+1, key);
 				Cbuf_AddText (cmd);
 			}
 		}
@@ -900,25 +834,25 @@ void Key_Event (int key, qboolean down)
 //
 // during demo playback, most keys bring up the main menu
 //
-
-// Baker: determine how to have demo play controls during PSP demo playback ... plus showscores and camera control
-	if (cls.demoplayback && down && consolekeys[key] && key_dest == key_game && key != K_AUX1  && key != K_AUX2)
+	if (cls.demoplayback && down && consolekeys[key] && key_dest == key_game)
 	{
 		M_ToggleMenu_f ();
 		return;
 	}
 
+//
 // if not a consolekey, send to the interpreter no matter what mode is
+//
 	if ( (key_dest == key_menu && menubound[key])
 	|| (key_dest == key_console && !consolekeys[key])
 	|| (key_dest == key_game && ( !con_forcedup || !consolekeys[key] ) ) )
 	{
-
-		if ((kb = keybindings[key]))
+		kb = keybindings[key];
+		if (kb)
 		{
 			if (kb[0] == '+')
 			{	// button commands add keynum as a parm
-				snprintf(cmd, sizeof(cmd),  "%s %i\n", kb, key);
+				sprintf (cmd, "%s %i\n", kb, key);
 				Cbuf_AddText (cmd);
 			}
 			else
@@ -930,7 +864,6 @@ void Key_Event (int key, qboolean down)
 		return;
 	}
 
-	// Baker: I think this next line is unreachable!
 	if (!down)
 		return;		// other systems only care about key down events
 
@@ -944,7 +877,6 @@ void Key_Event (int key, qboolean down)
 	case key_message:
 		Key_Message (key);
 		break;
-
 	case key_menu:
 		M_Keydown (key);
 		break;
@@ -953,7 +885,6 @@ void Key_Event (int key, qboolean down)
 	case key_console:
 		Key_Console (key);
 		break;
-
 	default:
 		Sys_Error ("Bad key_dest");
 	}

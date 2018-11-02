@@ -9,7 +9,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -20,7 +20,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include <pspaudiolib.h>
-#include <pspdebug.h>
 #include <pspkernel.h>
 
 extern "C"
@@ -40,12 +39,7 @@ namespace quake
 
 		static const unsigned int		channelCount				= 2;
 		static const unsigned int		inputBufferSize				= 16384;
-
-#if 1 //def NORMAL_MODE
 		static const unsigned int		inputFrequency				= 11025;
-#else
-		static const unsigned int		inputFrequency				= 22050;
-#endif
 		static const unsigned int		outputFrequency				= 44100;
 		static const unsigned int		inputSamplesPerOutputSample	= outputFrequency / inputFrequency;
 		static Sample					inputBuffer[inputBufferSize];

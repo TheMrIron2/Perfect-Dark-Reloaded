@@ -1,0 +1,42 @@
+/*
+Copyright (C) 2007 Peter Mackay and Chris Swindle.
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+
+See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+
+*/
+
+#include <pspmoduleinfo.h>
+#include <pspthreadman.h>
+#include "module.h"
+
+// Set up the module info.
+#ifdef KERNEL_MODE
+PSP_MODULE_INFO("QuakeKernel", PSP_MODULE_KERNEL, 1, 1);
+//PSP_MAIN_THREAD_ATTR(0);
+PSP_MAIN_THREAD_STACK_SIZE_KB(32);
+PSP_HEAP_SIZE_KB(PSP_HEAP_SIZE_MB * 1024);
+#else 
+PSP_MODULE_INFO("QuakeUser", PSP_MODULE_USER, 1, 1);
+PSP_MAIN_THREAD_ATTR(PSP_THREAD_ATTR_USER | PSP_THREAD_ATTR_VFPU);
+#ifdef SLIM
+PSP_HEAP_SIZE_KB(-2 * 1024);
+#else
+PSP_HEAP_SIZE_KB(-256);
+#endif
+//PSP_HEAP_SIZE_MAX();
+#endif
+
+

@@ -17,6 +17,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
+
 // cmd.h -- Command buffer and command execution
 
 //===========================================================================
@@ -55,6 +56,7 @@ void Cbuf_Execute (void);
 //===========================================================================
 
 /*
+
 Command execution takes a null terminated string, breaks it into tokens,
 then searches for a command or variable that matches the first token.
 
@@ -66,14 +68,19 @@ not apropriate.
 
 typedef void (*xcommand_t) (void);
 
-typedef enum {
-	src_client,		// came in over a net connection as a clc_stringcmd. host_client will be valid during this state.
+typedef enum
+{
+	src_client,		// came in over a net connection as a clc_stringcmd
+					// host_client will be valid during this state.
 	src_command		// from the command buffer
 } cmd_source_t;
 
 extern	cmd_source_t	cmd_source;
 
-void Cmd_CmdList_f (void);
+#define	MAX_FILELENGTH	64
+
+#define	MAXCMDLINE		256
+
 void	Cmd_Init (void);
 
 void	Cmd_AddCommand (char *cmd_name, xcommand_t function);
@@ -93,7 +100,7 @@ char	*Cmd_Argv (int arg);
 char	*Cmd_Args (void);
 // The functions that execute commands get their parameters with these
 // functions. Cmd_Argv () will return an empty string, not a NULL
-// if arg > argc, so string operations are always safe.
+// if arg > argc, so string operations are allways safe.
 
 int Cmd_CheckParm (char *parm);
 // Returns the position (1 to argc-1) in the command's argument list
@@ -107,7 +114,7 @@ void	Cmd_ExecuteString (char *text, cmd_source_t src);
 // Parses a single line of text into arguments and tries to execute it.
 // The text can come from the command buffer, a remote client, or stdin.
 
-void	Cmd_ForwardToServer_f (void);
+void	Cmd_ForwardToServer (void);
 // adds the current command line as a clc_stringcmd to the client message.
 // things like godmode, noclip, etc, are commands directed to the server,
 // so when they are typed in at the console, they will need to be forwarded.

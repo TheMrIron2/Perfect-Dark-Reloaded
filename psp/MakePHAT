@@ -1,0 +1,173 @@
+
+PSPSDK = $(shell psp-config --pspsdk-path)
+PSPLIBSDIR = $(PSPSDK)/..
+
+TARGET = DQuake
+PSP_EBOOT_TITLE = PSP DarkQuake PHAT ver: Plus
+
+#PSP_EBOOT_ICON = icon.png
+PSP_EBOOT_PIC1 = PIC0.PNG
+
+#MODE=-DKERNEL_MODE
+
+
+BUILD_PRX = 1
+
+COMMON_OBJS = \
+	battery.o \
+	input.o \
+	main.o \
+	math.o \
+	sound.o \
+	system.o \
+	module.o \
+	network.o \
+	network_psp.o \
+	gethost.o \
+	fnmatch.o \
+	cd.o \
+	mp3.o \
+	Random.o \
+	\
+	../chase.o \
+	../cl_demo.o \
+	../cl_input.o \
+	../cl_main.o \
+	../cl_parse.o \
+	../cl_tent.o \
+	../cl_slist.o \
+      ../cmd.o \
+	../common.o \
+	../console.o \
+	../crc.o \
+	../cvar.o \
+	../host.o \
+	../host_cmd.o \
+	../keys.o \
+	../mathlib.o \
+	../menu.o \
+	../net_dgrm.o \
+	../net_loop.o \
+	../net_main.o \
+	../net_vcr.o \
+	../pr_cmds.o \
+	../pr_edict.o \
+	../pr_exec.o \
+	../snd_dma.o \
+	../snd_mem.o \
+	../snd_mix.o \
+	../sbar.o \
+	../sv_main.o \
+	../sv_move.o \
+	../sv_phys.o \
+	../sv_user.o \
+	../view.o \
+	../wad.o \
+	../world.o \
+	../zone.o \
+	../crypter.o
+	
+HARDWARE_VIDEO_ONLY_OBJS = \
+    wad3.o \
+	clipping.o \
+    video_hardware.o \
+    video_hardware_resample.o \
+    video_hardware_images.o \
+    video_hardware_fullbright.o \
+    video_hardware_hlmdl.o \
+    video_hardware_draw.o \
+    video_hardware_entity_fragment.o \
+    video_hardware_QMB.o \
+    video_hardware_decals_QMB.o \
+    video_hardware_part.o \
+    video_hardware_light.o \
+    video_hardware_main.o \
+    video_hardware_mesh.o \
+    video_hardware_mhex2.o \
+    video_hardware_misc.o \
+    video_hardware_model.o \
+    video_hardware_screen.o \
+    video_hardware_surface.o \
+    video_hardware_warp.o \
+    video_hardware_fog.o \
+    video_hardware_dxtn.o
+HARDWARE_VIDEO_ONLY_FLAGS = -DPSP_HARDWARE_VIDEO
+
+SOFTWARE_REFRESH_ONLY_OBJS = \
+	video_software.o \
+	\
+      ../d_edge.o \
+	../d_fill.o \
+	../d_init.o \
+	../d_modech.o \
+	../d_part.o \
+	../d_polyse.o \
+	../d_scan.o \
+	../d_sky.o \
+	../d_sprite.o \
+	../d_surf.o \
+	../d_vars.o \
+	../d_zpoint.o \
+	../draw.o \
+	../model.o \
+	../nonintel.o \
+	../r_aclip.o \
+	../r_alias.o \
+	../r_bsp.o \
+	../r_draw.o \
+	../r_edge.o \
+	../r_efrag.o \
+	../r_light.o \
+	../r_main.o \
+	../r_misc.o \
+    ../r_part.o \
+	../r_sky.o \
+	../r_sprite.o \
+	../r_surf.o \
+	../r_vars.o \
+	../screen.o
+SOFTWARE_VIDEO_ONLY_FLAGS = -DPSP_SOFTWARE_VIDEO
+
+	
+OBJS = $(COMMON_OBJS) $(HARDWARE_VIDEO_ONLY_OBJS) 
+
+
+#LIBS = -lpspaudiolib -lpspaudio -lpspgum -lpspgu -lpsprtc -lpsppower -lpspwlan -lstdc++ -lm
+
+GU_LIBS	= -lpspgum_vfpu -lpspvfpu -lpspgu -lpspvram
+AUDIO_LIBS	= -lpspaudiolib -lpspaudio -lpspmp3 m33libs/libpspaudiocodec.a m33libs/libpspkubridge.a
+
+MISC_LIBS	= -lpsprtc -lpsppower -lpsphprm -ljpeg m33libs/libpng.a m33libs/libz.a
+NET_LIBS    = -lpspwlan -lpspnet_adhoc -lpspnet_adhocctl
+STD_LIBS	= -lstdc++ -lm -lc
+LIBS		= $(GU_LIBS) $(AUDIO_LIBS) $(MISC_LIBS) $(STD_LIBS) $(NET_LIBS)
+
+CFLAGS = -ffast-math -O3 -G0 -Wall -Did386="0" -DPSP $(MODE) $(HARDWARE_VIDEO_ONLY_FLAGS) -DSWIZZLE32 -DPSP_MP3_HWDECODE -DFULLBRIGHT -DHL_RENDER
+CXXFLAGS = -fno-rtti -Wcast-qual
+ASFLAGS = $(CFLAGS) -c
+
+include $(PSPSDK)/lib/build.mak
+
+ifneq ($(VS_PATH),)
+CC       = vs-psp-gcc
+CXX      = vs-psp-g++
+endif
+
+
+kx-install: kxploit
+ifeq ($(PSP_MOUNT),)
+	@echo '*** Error: $$(PSP_MOUNT) undefined. Please set it to for example /cygdrive/e'
+	@echo if your PSP is mounted to E: in cygwin.
+else
+	cp -r $(TARGET) $(PSP_MOUNT)/PSP/GAME/
+	cp -r $(TARGET)% $(PSP_MOUNT)/PSP/GAME/
+endif
+
+install: EBOOT.PBP
+ifeq ($(PSP_MOUNT),)
+	@echo '*** Error: $$(PSP_MOUNT) undefined. Please set it to for example /cygdrive/e'
+	@echo if your PSP is mounted to E: in cygwin.
+else
+	-mkdir $(PSP_MOUNT)/PSP/GAME/$(TARGET)
+	cp EBOOT.PBP $(PSP_MOUNT)/PSP/GAME/$(TARGET)/
+endif

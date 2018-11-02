@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -38,7 +38,7 @@ void ResampleSfx (sfx_t *sfx, int inrate, int inwidth, byte *data)
 	int		i;
 	int		sample, samplefrac, fracstep;
 	sfxcache_t	*sc;
-
+	
 	sc = Cache_Check (&sfx->cache);
 	if (!sc)
 		return;
@@ -105,21 +105,21 @@ sfxcache_t *S_LoadSound (sfx_t *s)
 	byte	stackbuf[1*1024];		// avoid dirtying the cache heap
 
 // see if still in memory
-	if ((sc = Cache_Check (&s->cache)))
+	sc = Cache_Check (&s->cache);
+	if (sc)
 		return sc;
 
 //Con_Printf ("S_LoadSound: %x\n", (int)stackbuf);
 // load it in
-    strcpy(namebuffer, "sound/");
-    strlcat (namebuffer, s->name, sizeof(namebuffer));
+    Q_strcpy(namebuffer, "sound/");
+    Q_strcat(namebuffer, s->name);
 
 //	Con_Printf ("loading %s\n",namebuffer);
 
-	if (!(data = COM_LoadStackFile(namebuffer, stackbuf, sizeof(stackbuf))))
+	data = COM_LoadStackFile(namebuffer, stackbuf, sizeof(stackbuf));
+
+	if (!data)
 	{
-		if (mod_nosoundwarn) // Developer print it instead if -nosoundwarn used
-			Con_DPrintf ("Couldn't load %s\n", namebuffer);
-		else
 		Con_Printf ("Couldn't load %s\n", namebuffer);
 		return NULL;
 	}
@@ -131,7 +131,7 @@ sfxcache_t *S_LoadSound (sfx_t *s)
 		return NULL;
 	}
 
-	stepscale = (float)info.rate / shm->speed;
+	stepscale = (float)info.rate / shm->speed;	
 	len = info.samples / stepscale;
 
 	len = len * info.width * info.channels;
@@ -139,7 +139,7 @@ sfxcache_t *S_LoadSound (sfx_t *s)
 	sc = Cache_Alloc ( &s->cache, len + sizeof(sfxcache_t), s->name);
 	if (!sc)
 		return NULL;
-
+	
 	sc->length = info.samples;
 	sc->loopstart = info.loopstart;
 	sc->speed = info.rate;
@@ -200,7 +200,7 @@ void FindNextChunk(char *name)
 			data_p = NULL;
 			return;
 		}
-
+		
 		data_p += 4;
 		iff_chunk_len = GetLittleLong();
 		if (iff_chunk_len < 0)
@@ -212,7 +212,7 @@ void FindNextChunk(char *name)
 //			Sys_Error ("FindNextChunk: %i length is past the 1 meg sanity limit", iff_chunk_len);
 		data_p -= 8;
 		last_chunk = data_p + 8 + ( (iff_chunk_len + 1) & ~1 );
-		if (!strncmp((char*) data_p, name, 4))
+		if (!Q_strncmp(data_p, name, 4))
 			return;
 	}
 }
@@ -227,7 +227,7 @@ void FindChunk(char *name)
 void DumpChunks(void)
 {
 	char	str[5];
-
+	
 	str[4] = 0;
 	data_p=iff_data;
 	do
@@ -256,13 +256,13 @@ wavinfo_t GetWavinfo (char *name, byte *wav, int wavlength)
 
 	if (!wav)
 		return info;
-
+		
 	iff_data = wav;
 	iff_end = wav + wavlength;
 
 // find "RIFF" chunk
 	FindChunk("RIFF");
-	if (!(data_p && !strncmp((char*) data_p+8, "WAVE", 4)))
+	if (!(data_p && !Q_strncmp(data_p+8, "WAVE", 4)))
 	{
 		Con_Printf("Missing RIFF/WAVE chunks\n");
 		return info;
@@ -303,7 +303,7 @@ wavinfo_t GetWavinfo (char *name, byte *wav, int wavlength)
 		FindNextChunk ("LIST");
 		if (data_p)
 		{
-			if (!strncmp ((char*) data_p + 28, "mark", 4))
+			if (!strncmp (data_p + 28, "mark", 4))
 			{	// this is not a proper parse, but it works with cooledit...
 				data_p += 24;
 				i = GetLittleLong ();	// samples in loop
@@ -335,7 +335,7 @@ wavinfo_t GetWavinfo (char *name, byte *wav, int wavlength)
 		info.samples = samples;
 
 	info.dataofs = data_p - wav;
-
+	
 	return info;
 }
 

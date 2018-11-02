@@ -17,9 +17,9 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
-// #if !defined(GLQUAKE) && !defined(PSP_HARDWARE_VIDEO)
-// r_shared.h: general refresh-related stuff shared between the refresh and the driver
-// Only used by software renderers
+#if !defined(GLQUAKE) && !defined(PSP_HARDWARE_VIDEO)
+// r_shared.h: general refresh-related stuff shared between the refresh and the
+// driver
 
 // FIXME: clean up and move into d_iface.h
 
@@ -27,8 +27,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define _R_SHARED_H_
 
 #define	MAXVERTS	16					// max points in a surface polygon
-#define MAXWORKINGVERTS	(MAXVERTS+4)	// max points in an intermediate polygon (while processing)
-
+#define MAXWORKINGVERTS	(MAXVERTS+4)	// max points in an intermediate
+										//  polygon (while processing)
 // !!! if this is changed, it must be changed in d_ifacea.h too !!!
 #define	MAXHEIGHT		1024
 #define	MAXWIDTH		1280
@@ -37,7 +37,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define SIN_BUFFER_SIZE	(MAXDIMENSION+CYCLE)
 
 #define INFINITE_DISTANCE	0x10000		// distance that's always guaranteed to
-										//  be farther away than anything in the scene
+										//  be farther away than anything in
+										//  the scene
 
 //===================================================================
 
@@ -85,7 +86,8 @@ typedef struct surf_s
 	int			last_u;				// set during tracing
 	int			spanstate;			// 0 = not in span
 									// 1 = in span
-									// -1 = in inverted span (end before start)
+									// -1 = in inverted span (end before
+									//  start)
 	int			flags;				// currentface flags
 	void		*data;				// associated data like msurface_t
 	entity_t	*entity;
@@ -151,4 +153,4 @@ typedef struct edge_s
 
 #endif	// _R_SHARED_H_
 
-//#endif	// GLQUAKE, PSP_HARDWARE_VIDEO
+#endif	// GLQUAKE, PSP_HARDWARE_VIDEO

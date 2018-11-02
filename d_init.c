@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -25,7 +25,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define NUM_MIPS	4
 
 cvar_t	d_subdiv16 = {"d_subdiv16", "1"};
-cvar_t	d_mipcap = {"d_mipcap", "0", true};
+cvar_t	d_mipcap = {"d_mipcap", "0"};
 cvar_t	d_mipscale = {"d_mipscale", "1"};
 
 surfcache_t		*d_initial_rover;
@@ -47,15 +47,37 @@ D_Init
 */
 void D_Init (void)
 {
-	Cvar_RegisterVariable (&d_subdiv16, NULL);
-	Cvar_RegisterVariable (&d_mipcap, NULL);
-	Cvar_RegisterVariable (&d_mipscale, NULL);
+
+	r_skydirect = 1;
+
+	Cvar_RegisterVariable (&d_subdiv16);
+	Cvar_RegisterVariable (&d_mipcap);
+	Cvar_RegisterVariable (&d_mipscale);
 
 	r_drawpolys = false;
 	r_worldpolysbacktofront = false;
 	r_recursiveaffinetriangles = true;
 	r_pixbytes = 1;
 	r_aliasuvscale = 1.0;
+}
+
+
+/*
+===============
+D_CopyRects
+===============
+*/
+void D_CopyRects (vrect_t *prects, int transparent)
+{
+
+// this function is only required if the CPU doesn't have direct access to the
+// back buffer, and there's some driver interface function that the driver
+// doesn't support and requires Quake to do in software (such as drawing the
+// console); Quake will then draw into wherever the driver points vid.buffer
+// and will call this function before swapping buffers
+
+	UNUSED(prects);
+	UNUSED(transparent);
 }
 
 
@@ -69,6 +91,18 @@ void D_EnableBackBufferAccess (void)
 	VID_LockBuffer ();
 }
 
+
+/*
+===============
+D_TurnZOn
+===============
+*/
+void D_TurnZOn (void)
+{
+// not needed for software version
+}
+
+
 /*
 ===============
 D_DisableBackBufferAccess
@@ -78,6 +112,7 @@ void D_DisableBackBufferAccess (void)
 {
 	VID_UnlockBuffer ();
 }
+
 
 /*
 ===============
@@ -122,7 +157,7 @@ void D_SetupFrame (void)
 	d_aflatcolor = 0;
 }
 
-#if 0
+
 /*
 ===============
 D_UpdateRects
@@ -135,5 +170,4 @@ void D_UpdateRects (vrect_t *prect)
 
 	UNUSED(prect);
 }
-#endif
 

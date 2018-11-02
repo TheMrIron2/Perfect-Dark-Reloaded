@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -26,24 +26,9 @@ void IN_Shutdown (void);
 void IN_Commands (void);
 // oportunity for devices to stick commands on the script buffer
 
-#ifdef _WIN32 // Change this to Win32 or somethign
-void IN_Accumulate (void);
-#endif
-
 void IN_Move (usercmd_t *cmd);
 // add additional movement on top of the keyboard move cmd
 
 void IN_ClearStates (void);
 // restores all button and position states to defaults
 
-
-#ifdef _WIN32
-void IN_MouseWheel (void);
-#endif
-
-extern	cvar_t	freelook;   // Baker 3.60 - Freelook cvar support
-extern cvar_t	m_accel;
-
-#ifndef PSP_RECONCILE
-#define mlook_active	(freelook.value || (in_mlook.state & 1))
-#endif

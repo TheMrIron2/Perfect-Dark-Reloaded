@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -19,24 +19,18 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 // net_dgrm.c
 
-#include "quakedef.h"
-#include "net_dgrm.h"
-
 // This is enables a simple IP banning mechanism
-#ifndef PSP_NETWORKING_CODE
+#ifndef PSP
 #define BAN_TEST
 #endif
 
+#include "pspkernel.h"
+
 #ifdef BAN_TEST
-#if defined(_WIN32)
+#if defined(WIN32)
 #include <windows.h>
 #elif defined (NeXT)
 #include <sys/socket.h>
-#include <arpa/inet.h>
-#elif defined (MACOSX)
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
 #else
 #define AF_INET 		2	/* internet */
@@ -62,13 +56,16 @@ unsigned long inet_addr(const char *cp);
 #endif
 #endif	// BAN_TEST
 
+#include "quakedef.h"
+#include "net_dgrm.h"
+
 // these two macros are to make the code more readable
 #define sfunc	net_landrivers[sock->landriver]
 #define dfunc	net_landrivers[net_landriverlevel]
 
 static int net_landriverlevel;
 
-// statistic counters
+/* statistic counters */
 int	packetsSent = 0;
 int	packetsReSent = 0;
 int packetsReceived = 0;
@@ -86,7 +83,7 @@ struct
 } packetBuffer;
 
 extern int m_return_state;
-extern int menu_state;
+extern int m_state;
 extern qboolean m_return_onerror;
 extern char m_return_reason[32];
 
@@ -99,12 +96,7 @@ char *StrAddr (struct qsockaddr *addr)
 	int n;
 
 	for (n = 0; n < 16; n++)
-#ifdef MACOSX_NETWORK_DIFFERENCE
-		snprintf (buf + n << 1, 34 - (n << 1), "%02x", *p++);
-#else
 		sprintf (buf + n * 2, "%02x", *p++);
-#endif /* MACOSX */
-
 	return buf;
 }
 #endif
@@ -124,14 +116,14 @@ void NET_Ban_f (void)
 	{
 		if (!sv.active)
 		{
-			Cmd_ForwardToServer_f ();
+			Cmd_ForwardToServer ();
 			return;
 		}
 		print = Con_Printf;
 	}
 	else
 	{
-		if (pr_global_struct->deathmatch)
+		if (pr_global_struct->deathmatch && !host_client->privileged)
 			return;
 		print = SV_ClientPrintf;
 	}
@@ -141,8 +133,8 @@ void NET_Ban_f (void)
 		case 1:
 			if (((struct in_addr *)&banAddr)->s_addr)
 			{
-				strcpy(addrStr, inet_ntoa(*(struct in_addr *)&banAddr));
-				strcpy(maskStr, inet_ntoa(*(struct in_addr *)&banMask));
+				Q_strcpy(addrStr, inet_ntoa(*(struct in_addr *)&banAddr));
+				Q_strcpy(maskStr, inet_ntoa(*(struct in_addr *)&banMask));
 				print("Banning %s [%s]\n", addrStr, maskStr);
 			}
 			else
@@ -150,7 +142,7 @@ void NET_Ban_f (void)
 			break;
 
 		case 2:
-			if (strcasecmp(Cmd_Argv(1), "off") == 0)
+			if (Q_strcasecmp(Cmd_Argv(1), "off") == 0)
 				banAddr = 0x00000000;
 			else
 				banAddr = inet_addr(Cmd_Argv(1));
@@ -172,7 +164,9 @@ void NET_Ban_f (void)
 
 int Datagram_SendMessage (qsocket_t *sock, sizebuf_t *data)
 {
-	unsigned int	packetLen, dataLen, eom;
+	unsigned int	packetLen;
+	unsigned int	dataLen;
+	unsigned int	eom;
 
 #ifdef DEBUG
 	if (data->cursize == 0)
@@ -185,7 +179,7 @@ int Datagram_SendMessage (qsocket_t *sock, sizebuf_t *data)
 		Sys_Error("SendMessage: called with canSend == false\n");
 #endif
 
-	memcpy(sock->sendMessage, data->data, data->cursize);
+	Q_memcpy(sock->sendMessage, data->data, data->cursize);
 	sock->sendMessageLength = data->cursize;
 
 	if (data->cursize <= MAX_DATAGRAM)
@@ -202,7 +196,7 @@ int Datagram_SendMessage (qsocket_t *sock, sizebuf_t *data)
 
 	packetBuffer.length = BigLong(packetLen | (NETFLAG_DATA | eom));
 	packetBuffer.sequence = BigLong(sock->sendSequence++);
-	memcpy (packetBuffer.data, sock->sendMessage, dataLen);
+	Q_memcpy (packetBuffer.data, sock->sendMessage, dataLen);
 
 	sock->canSend = false;
 
@@ -217,7 +211,9 @@ int Datagram_SendMessage (qsocket_t *sock, sizebuf_t *data)
 
 int SendMessageNext (qsocket_t *sock)
 {
-	unsigned int	packetLen, dataLen, eom;
+	unsigned int	packetLen;
+	unsigned int	dataLen;
+	unsigned int	eom;
 
 	if (sock->sendMessageLength <= MAX_DATAGRAM)
 	{
@@ -233,7 +229,7 @@ int SendMessageNext (qsocket_t *sock)
 
 	packetBuffer.length = BigLong(packetLen | (NETFLAG_DATA | eom));
 	packetBuffer.sequence = BigLong(sock->sendSequence++);
-	memcpy (packetBuffer.data, sock->sendMessage, dataLen);
+	Q_memcpy (packetBuffer.data, sock->sendMessage, dataLen);
 
 	sock->sendNext = false;
 
@@ -248,7 +244,9 @@ int SendMessageNext (qsocket_t *sock)
 
 int ReSendMessage (qsocket_t *sock)
 {
-	unsigned int	packetLen, dataLen, eom;
+	unsigned int	packetLen;
+	unsigned int	dataLen;
+	unsigned int	eom;
 
 	if (sock->sendMessageLength <= MAX_DATAGRAM)
 	{
@@ -264,7 +262,7 @@ int ReSendMessage (qsocket_t *sock)
 
 	packetBuffer.length = BigLong(packetLen | (NETFLAG_DATA | eom));
 	packetBuffer.sequence = BigLong(sock->sendSequence - 1);
-	memcpy (packetBuffer.data, sock->sendMessage, dataLen);
+	Q_memcpy (packetBuffer.data, sock->sendMessage, dataLen);
 
 	sock->sendNext = false;
 
@@ -308,7 +306,7 @@ int Datagram_SendUnreliableMessage (qsocket_t *sock, sizebuf_t *data)
 
 	packetBuffer.length = BigLong(packetLen | NETFLAG_UNRELIABLE);
 	packetBuffer.sequence = BigLong(sock->unreliableSendSequence++);
-	memcpy (packetBuffer.data, data->data, data->cursize);
+	Q_memcpy (packetBuffer.data, data->data, data->cursize);
 
 	if (sfunc.Write (sock->socket, (byte *)&packetBuffer, packetLen, &sock->addr) == -1)
 		return -1;
@@ -320,19 +318,21 @@ int Datagram_SendUnreliableMessage (qsocket_t *sock, sizebuf_t *data)
 
 int	Datagram_GetMessage (qsocket_t *sock)
 {
-	unsigned int	length, flags;
+	unsigned int	length;
+	unsigned int	flags;
 	int				ret = 0;
 	struct qsockaddr readaddr;
-	unsigned int	sequence, count;
+	unsigned int	sequence;
+	unsigned int	count;
 
-#if !defined(PSP_NETWORKING_CODE)
+#if 0
 	if (!sock->canSend)
 		if ((net_time - sock->lastSendTime) > 1.0)
 			ReSendMessage (sock);
 #endif
 
 	while(1)
-	{
+	{	
 		length = sfunc.Read (sock->socket, (byte *)&packetBuffer, NET_DATAGRAMSIZE, &readaddr);
 
 //	if ((rand() & 255) > 220)
@@ -346,12 +346,8 @@ int	Datagram_GetMessage (qsocket_t *sock)
 			Con_Printf("Read error\n");
 			return -1;
 		}
-#ifdef PROQUAKE_EXTENSION
-		// JPG 3.40 - added !sock->net_wait (NAT fix)
-		if (!sock->net_wait && sfunc.AddrCompare(&readaddr, &sock->addr) != 0)
-#else
+
 		if (sfunc.AddrCompare(&readaddr, &sock->addr) != 0)
-#endif
 		{
 #ifdef DEBUG
 			Con_DPrintf("Forged packet received\n");
@@ -371,27 +367,12 @@ int	Datagram_GetMessage (qsocket_t *sock)
 		flags = length & (~NETFLAG_LENGTH_MASK);
 		length &= NETFLAG_LENGTH_MASK;
 
-		// JPG 3.20 - fix for attack that crashes server
-		if (length > NET_DATAGRAMSIZE)
-		{
-			Con_Printf("Invalid length\n");
-			return -1;
-		}
-
 		if (flags & NETFLAG_CTL)
 			continue;
 
 		sequence = BigLong(packetBuffer.sequence);
 		packetsReceived++;
-#ifdef PROQUAKE_EXTENSION
-		// JPG 3.40 - NAT fix
-		if (sock->net_wait)
-		{
-			sock->addr = readaddr;
-			strcpy(sock->address, sfunc.AddrToString(&readaddr));
-			sock->net_wait = false;
-		}
-#endif
+
 		if (flags & NETFLAG_UNRELIABLE)
 		{
 			if (sequence < sock->unreliableReceiveSequence)
@@ -438,7 +419,7 @@ int	Datagram_GetMessage (qsocket_t *sock)
 			sock->sendMessageLength -= MAX_DATAGRAM;
 			if (sock->sendMessageLength > 0)
 			{
-				memcpy(sock->sendMessage, sock->sendMessage+MAX_DATAGRAM, sock->sendMessageLength);
+				Q_memcpy(sock->sendMessage, sock->sendMessage+MAX_DATAGRAM, sock->sendMessageLength);
 				sock->sendNext = true;
 			}
 			else
@@ -475,7 +456,7 @@ int	Datagram_GetMessage (qsocket_t *sock)
 				break;
 			}
 
-			memcpy(sock->receiveMessage + sock->receiveMessageLength, packetBuffer.data, length);
+			Q_memcpy(sock->receiveMessage + sock->receiveMessageLength, packetBuffer.data, length);
 			sock->receiveMessageLength += length;
 			continue;
 		}
@@ -513,7 +494,7 @@ void NET_Stats_f (void)
 		Con_Printf("shortPacketCount           = %i\n", shortPacketCount);
 		Con_Printf("droppedDatagrams           = %i\n", droppedDatagrams);
 	}
-	else if (strcmp(Cmd_Argv(1), "*") == 0)
+	else if (Q_strcmp(Cmd_Argv(1), "*") == 0)
 	{
 		for (s = net_activeSockets; s; s = s->next)
 			PrintStats(s);
@@ -523,11 +504,11 @@ void NET_Stats_f (void)
 	else
 	{
 		for (s = net_activeSockets; s; s = s->next)
-			if (strcasecmp(Cmd_Argv(1), s->address) == 0)
+			if (Q_strcasecmp(Cmd_Argv(1), s->address) == 0)
 				break;
 		if (s == NULL)
 			for (s = net_freeSockets; s; s = s->next)
-				if (strcasecmp(Cmd_Argv(1), s->address) == 0)
+				if (Q_strcasecmp(Cmd_Argv(1), s->address) == 0)
 					break;
 		if (s == NULL)
 			return;
@@ -535,25 +516,6 @@ void NET_Stats_f (void)
 	}
 }
 
-// JPG - recognize ip:port
-void Strip_Port (char *ch)
-{
-	if ((ch = strchr(ch, ':')))
-	{
-		int old_port = net_hostport;
-
-		sscanf(ch+1, "%d", &net_hostport);
-		for ( ; ch[-1] == ' ' ; ch--);
-		*ch = 0;
-		if (net_hostport != old_port)
-			Con_Printf("Setting port to %d\n", net_hostport);
-	}
-	else //R00k if not specifying port then use default port
-	{
-		net_hostport = DEFAULTnet_hostport;
-		Con_Printf ("Using port %d\n", net_hostport);
-	}
-}
 
 static qboolean testInProgress = false;
 static int		testPollCount;
@@ -596,17 +558,14 @@ static void Test_Poll(void)
 			break;
 
 		if (MSG_ReadByte() != CCREP_PLAYER_INFO)
-		{
-			Con_Printf("Unexpected repsonse to Player Info request\n");	// JPG 3.00 - changed from Sys_Error to Con_Printf
-			break;
-		}
+			Sys_Error("Unexpected repsonse to Player Info request\n");
 
 		playerNumber = MSG_ReadByte();
-		strcpy(name, MSG_ReadString());
+		Q_strcpy(name, MSG_ReadString());
 		colors = MSG_ReadLong();
 		frags = MSG_ReadLong();
 		connectTime = MSG_ReadLong();
-		strcpy(address, MSG_ReadString());
+		Q_strcpy(address, MSG_ReadString());
 
 		Con_Printf("%s\n  frags:%3i  colors:%u %u  time:%u\n  %s\n", name, frags, colors >> 4, colors & 0x0f, connectTime / 60, address);
 	}
@@ -626,34 +585,25 @@ static void Test_Poll(void)
 static void Test_f (void)
 {
 	char	*host;
-	int		n, max = MAX_SCOREBOARD;
+	int		n;
+	int		max = MAX_SCOREBOARD;
 	struct qsockaddr sendaddr;
 
 	if (testInProgress)
-	{	// joe: added error message from ProQuake
-		Con_Printf ("There is already a test/rcon in progress\n");
 		return;
-	}
-
-	if (Cmd_Argc() < 2)
-	{
-		Con_Printf ("Usage: test <host>\n");
-		return;
-	}
 
 	host = Cmd_Argv (1);
-	Strip_Port(host);
 
 	if (host && hostCacheCount)
 	{
 		for (n = 0; n < hostCacheCount; n++)
-			if (strcasecmp (host, hostcache[n].name) == 0)
+			if (Q_strcasecmp (host, hostcache[n].name) == 0)
 			{
 				if (hostcache[n].driver != myDriverLevel)
 					continue;
 				net_landriverlevel = hostcache[n].ldriver;
 				max = hostcache[n].maxusers;
-				memcpy(&sendaddr, &hostcache[n].addr, sizeof(struct qsockaddr));
+				Q_memcpy(&sendaddr, &hostcache[n].addr, sizeof(struct qsockaddr));
 				break;
 			}
 		if (n < hostCacheCount)
@@ -670,18 +620,12 @@ static void Test_f (void)
 			break;
 	}
 	if (net_landriverlevel == net_numlandrivers)
-	{
-		Con_Printf("Could not resolve %s\n", host);	// JPG 3.00 - added error message
 		return;
-	}
 
 JustDoIt:
 	testSocket = dfunc.OpenSocket(0);
 	if (testSocket == -1)
-	{
-		Con_Printf("Could not open socket\n"); // JPG 3.00 - added error message
 		return;
-	}
 
 	testInProgress = true;
 	testPollCount = 20;
@@ -701,11 +645,10 @@ JustDoIt:
 	SchedulePollProcedure(&testPollProcedure, 0.1);
 }
 
-/* JPG 3.00 - got rid of these.  Just use test vars; only ONE outstanding test of any kind.
+
 static qboolean test2InProgress = false;
 static int		test2Driver;
 static int		test2Socket;
-*/
 
 static void Test2_Poll(void);
 PollProcedure	test2PollProcedure = {NULL, 0.0, Test2_Poll};
@@ -713,13 +656,15 @@ PollProcedure	test2PollProcedure = {NULL, 0.0, Test2_Poll};
 static void Test2_Poll(void)
 {
 	struct qsockaddr clientaddr;
-	int		control, len;
-	char	name[256], value[256];
+	int		control;
+	int		len;
+	char	name[256];
+	char	value[256];
 
-	net_landriverlevel = testDriver;	// JPG 3.00 test2Driver->testDriver
+	net_landriverlevel = test2Driver;
 	name[0] = 0;
 
-	len = dfunc.Read (testSocket, net_message.data, net_message.maxsize, &clientaddr);	// JPG 3.00 test2Socket->testSocket
+	len = dfunc.Read (test2Socket, net_message.data, net_message.maxsize, &clientaddr);
 	if (len < sizeof(int))
 		goto Reschedule;
 
@@ -738,10 +683,10 @@ static void Test2_Poll(void)
 	if (MSG_ReadByte() != CCREP_RULE_INFO)
 		goto Error;
 
-	strcpy(name, MSG_ReadString());
+	Q_strcpy(name, MSG_ReadString());
 	if (name[0] == 0)
 		goto Done;
-	strcpy(value, MSG_ReadString());
+	Q_strcpy(value, MSG_ReadString());
 
 	Con_Printf("%-16.16s  %-16.16s\n", name, value);
 
@@ -751,25 +696,18 @@ static void Test2_Poll(void)
 	MSG_WriteByte(&net_message, CCREQ_RULE_INFO);
 	MSG_WriteString(&net_message, name);
 	*((int *)net_message.data) = BigLong(NETFLAG_CTL | (net_message.cursize & NETFLAG_LENGTH_MASK));
-	dfunc.Write (testSocket, net_message.data, net_message.cursize, &clientaddr);	// JPG 3.00 test2Socket->testSocket
+	dfunc.Write (test2Socket, net_message.data, net_message.cursize, &clientaddr);
 	SZ_Clear(&net_message);
 
 Reschedule:
-	// JPG 3.00 - added poll counter
-	testPollCount--;
-	if (testPollCount)
-	{
 	SchedulePollProcedure(&test2PollProcedure, 0.05);
 	return;
-	}
-	goto Done;
 
 Error:
-	Con_Printf("Unexpected response to Rule Info request\n");
-
+	Con_Printf("Unexpected repsonse to Rule Info request\n");
 Done:
-	dfunc.CloseSocket(testSocket);	// JPG 3.00 test2Socket->testSocket
-	testInProgress = false;			// JPG 3.00 test2InProgress->testInProgress
+	dfunc.CloseSocket(test2Socket);
+	test2InProgress = false;
 	return;
 }
 
@@ -779,30 +717,20 @@ static void Test2_f (void)
 	int		n;
 	struct qsockaddr sendaddr;
 
-	if (testInProgress)
-	{	// joe: added error message from ProQuake
-		Con_Printf ("There is already a test/rcon in progress\n");
+	if (test2InProgress)
 		return;
-	}
-
-	if (Cmd_Argc() < 2)
-	{
-		Con_Printf ("Usage: test2 <host>\n");
-		return;
-	}
 
 	host = Cmd_Argv (1);
-	Strip_Port(host);
 
 	if (host && hostCacheCount)
 	{
 		for (n = 0; n < hostCacheCount; n++)
-			if (strcasecmp (host, hostcache[n].name) == 0)
+			if (Q_strcasecmp (host, hostcache[n].name) == 0)
 			{
 				if (hostcache[n].driver != myDriverLevel)
 					continue;
 				net_landriverlevel = hostcache[n].ldriver;
-				memcpy(&sendaddr, &hostcache[n].addr, sizeof(struct qsockaddr));
+				Q_memcpy(&sendaddr, &hostcache[n].addr, sizeof(struct qsockaddr));
 				break;
 			}
 		if (n < hostCacheCount)
@@ -819,22 +747,15 @@ static void Test2_f (void)
 			break;
 	}
 	if (net_landriverlevel == net_numlandrivers)
-	{
-		Con_Printf("Could not resolve %s\n", host);	// JPG 3.00 - added error message
 		return;
-	}
 
 JustDoIt:
-	testSocket = dfunc.OpenSocket(0);	// JPG 3.00 test2Socket->testSocket
-	if (testSocket == -1)				// JPG 3.00 test2Socket->testSocket
-	{
-		Con_Printf("Could not open socket\n"); // JPG 3.00 - added error message
+	test2Socket = dfunc.OpenSocket(0);
+	if (test2Socket == -1)
 		return;
-	}
 
-	testInProgress = true;				// JPG 3.00 test2InProgress->testInProgress
-	testPollCount = 20;					// JPG 3.00 added this
-	testDriver = net_landriverlevel;	// JPG 3.00 test2Driver->testDriver
+	test2InProgress = true;
+	test2Driver = net_landriverlevel;
 
 	SZ_Clear(&net_message);
 	// save space for the header, filled in later
@@ -842,203 +763,40 @@ JustDoIt:
 	MSG_WriteByte(&net_message, CCREQ_RULE_INFO);
 	MSG_WriteString(&net_message, "");
 	*((int *)net_message.data) = BigLong(NETFLAG_CTL | (net_message.cursize & NETFLAG_LENGTH_MASK));
-	dfunc.Write (testSocket, net_message.data, net_message.cursize, &sendaddr);	// JPG 3.00 test2Socket->testSocket
+	dfunc.Write (test2Socket, net_message.data, net_message.cursize, &sendaddr);
 	SZ_Clear(&net_message);
 	SchedulePollProcedure(&test2PollProcedure, 0.05);
 }
 
-static void Rcon_Poll (void);
-PollProcedure	rconPollProcedure = {NULL, 0.0, Rcon_Poll};
 
-static void Rcon_Poll(void)
+int Datagram_Init ()
 {
-	struct qsockaddr clientaddr;
-	int		control, len;
-
-	net_landriverlevel = testDriver;
-
-	len = dfunc.Read (testSocket, net_message.data, net_message.maxsize, &clientaddr);
-	if (len < sizeof(int))
-	{
-		testPollCount--;
-		if (testPollCount)
-		{
-			SchedulePollProcedure(&rconPollProcedure, 0.25);
-			return;
-		}
-		Con_Printf("rcon: no response\n");
-		goto Done;
-	}
-
-	net_message.cursize = len;
-
-	MSG_BeginReading ();
-	control = BigLong(*((int *)net_message.data));
-	MSG_ReadLong();
-	if (control == -1)
-		goto Error;
-	if ((control & (~NETFLAG_LENGTH_MASK)) !=  NETFLAG_CTL)
-		goto Error;
-	if ((control & NETFLAG_LENGTH_MASK) != len)
-		goto Error;
-
-	if (MSG_ReadByte() != CCREP_RCON)
-		goto Error;
-
-	Con_Printf("%s\n", MSG_ReadString());
-
-	goto Done;
-
-Error:
-	Con_Printf("Unexpected repsonse to rcon command\n");
-
-Done:
-	dfunc.CloseSocket(testSocket);
-	testInProgress = false;
-	return;
-}
-
-// JPG 3.02 - rcon
-extern cvar_t rcon_password;
-extern cvar_t rcon_server;
-extern char server_name[MAX_QPATH];
-
-static void Rcon_f (void)
-{
-	char	*host;
-	int		n;
-	struct qsockaddr sendaddr;
-
-	if (testInProgress)
-	{
-		Con_Printf("There is already a test/rcon in progress\n");
-		return;
-	}
-
-	if (Cmd_Argc() < 2)
-	{
-		Con_Printf("usage: rcon <command>\n");
-		return;
-	}
-
-	if (!*rcon_password.string)
-	{
-		Con_Printf("rcon_password has not been set\n");
-		return;
-	}
-
-	host = rcon_server.string;
-
-	if (!*rcon_server.string)
-	{
-		// JPG 3.50 - use current server
-		if (cls.state == ca_connected)
-			host = server_name;
-		else
-		{
-			Con_Printf("rcon_server has not been set\n");
-			return;
-		}
-	}
-
-	Strip_Port(host);
-
-	if (host && hostCacheCount)
-	{
-		for (n = 0; n < hostCacheCount; n++)
-			if (strcasecmp (host, hostcache[n].name) == 0)
-			{
-				if (hostcache[n].driver != myDriverLevel)
-					continue;
-				net_landriverlevel = hostcache[n].ldriver;
-				memcpy(&sendaddr, &hostcache[n].addr, sizeof(struct qsockaddr));
-				break;
-			}
-		if (n < hostCacheCount)
-			goto JustDoIt;
-	}
-
-	for (net_landriverlevel = 0; net_landriverlevel < net_numlandrivers; net_landriverlevel++)
-	{
-		if (!net_landrivers[net_landriverlevel].initialized)
-			continue;
-
-		// see if we can resolve the host name
-		if (dfunc.GetAddrFromName(host, &sendaddr) != -1)
-			break;
-	}
-	if (net_landriverlevel == net_numlandrivers)
-	{
-		Con_Printf("Could not resolve %s\n", host);
-		return;
-	}
-
-JustDoIt:
-	testSocket = dfunc.OpenSocket(0);
-	if (testSocket == -1)
-	{
-		Con_Printf("Could not open socket\n");
-		return;
-	}
-
-	testInProgress = true;
-	testPollCount = 20;
-	testDriver = net_landriverlevel;
-
-	SZ_Clear(&net_message);
-	// save space for the header, filled in later
-	MSG_WriteLong(&net_message, 0);
-	MSG_WriteByte(&net_message, CCREQ_RCON);
-	MSG_WriteString(&net_message, rcon_password.string);
-	MSG_WriteString(&net_message, Cmd_Args());
-	*((int *)net_message.data) = BigLong(NETFLAG_CTL | (net_message.cursize & NETFLAG_LENGTH_MASK));
-	dfunc.Write (testSocket, net_message.data, net_message.cursize, &sendaddr);
-	SZ_Clear(&net_message);
-	SchedulePollProcedure(&rconPollProcedure, 0.05);
-}
-
-int Datagram_Init (void)
-{
-	int	i, csock;
+	int i;
+	int csock;
 
 	myDriverLevel = net_driverlevel;
-#ifdef PSP_NETWORKING_CODE
 	if(!host_initialized)
-#endif
 		Cmd_AddCommand ("net_stats", NET_Stats_f);
 
 	if (COM_CheckParm("-nolan"))
 		return -1;
 
-#ifdef PSP_NETWORKING_CODE
-	i = net_driver_to_use;
-#else
-	for (i = 0; i < net_numlandrivers; i++)
-#endif
+	i = net_driver_to_use;//for (i = 0; i < net_numlandrivers; i++)
 		{
 		csock = net_landrivers[i].Init ();
-		if (csock == -1)
-#ifdef PSP_NETWORKING_CODE
-			return 0;
-#else
-			continue;
-#endif
+		if (csock == -1) return 0;
+			//continue;
 		net_landrivers[i].initialized = true;
 		net_landrivers[i].controlSock = csock;
 		}
 
-#ifdef PSP_NETWORKING_CODE
-	// Baker: the PSP initializes the network
-	// at user request
 	if(!host_initialized)
-#endif
 	{
 #ifdef BAN_TEST
 		Cmd_AddCommand ("ban", NET_Ban_f);
 #endif
 		Cmd_AddCommand ("test", Test_f);
 		Cmd_AddCommand ("test2", Test2_f);
-		Cmd_AddCommand ("rcon", Rcon_f);	// JPG 3.00 - rcon
 	}
 
 	return 0;
@@ -1049,7 +807,9 @@ void Datagram_Shutdown (void)
 {
 	int i;
 
+//
 // shutdown the lan drivers
+//
 	for (i = 0; i < net_numlandrivers; i++)
 	{
 		if (net_landrivers[i].initialized)
@@ -1076,25 +836,6 @@ void Datagram_Listen (qboolean state)
 			net_landrivers[i].Listen (state);
 }
 
-// JPG 3.00 - this code appears multiple times, so factor it out
-qsocket_t *Datagram_Reject (char *message, int acceptsock, struct qsockaddr *addr)
-{
-	SZ_Clear(&net_message);
-	// save space for the header, filled in later
-	MSG_WriteLong(&net_message, 0);
-	MSG_WriteByte(&net_message, CCREP_REJECT);
-	MSG_WriteString(&net_message, message);
-	*((int *)net_message.data) = BigLong(NETFLAG_CTL | (net_message.cursize & NETFLAG_LENGTH_MASK));
-	dfunc.Write (acceptsock, net_message.data, net_message.cursize, addr);
-	SZ_Clear(&net_message);
-
-	return NULL;
-}
-
-#ifdef PROQUAKE_EXTENSION
-extern cvar_t pq_password;			// JPG 3.00 - password protection
-extern unsigned long qsmackAddr;	// JPG 3.02 - allow qsmack bots to connect to server
-#endif
 
 static qsocket_t *_Datagram_CheckNewConnections (void)
 {
@@ -1108,9 +849,6 @@ static qsocket_t *_Datagram_CheckNewConnections (void)
 	int			command;
 	int			control;
 	int			ret;
-#ifdef PROQUAKE_EXTENSION
-	byte		mod, mod_version, mod_flags;	// JPG 3.02 - bugfix!
-#endif
 
 	acceptsock = dfunc.CheckNewConnections();
 	if (acceptsock == -1)
@@ -1136,14 +874,7 @@ static qsocket_t *_Datagram_CheckNewConnections (void)
 	command = MSG_ReadByte();
 	if (command == CCREQ_SERVER_INFO)
 	{
-		// JPG 3.50
-		char name[256];
-		strcpy(name, hostname.string);
-#ifdef PROQUAKE_EXTENSION
-		if (pq_cheatfree)
-			strlcat (name, " (cheat-free)", sizeof(name));
-#endif
-		if (strcmp(MSG_ReadString(), "QUAKE") != 0)
+		if (Q_strcmp(MSG_ReadString(), "QUAKE") != 0)
 			return NULL;
 
 		SZ_Clear(&net_message);
@@ -1152,7 +883,7 @@ static qsocket_t *_Datagram_CheckNewConnections (void)
 		MSG_WriteByte(&net_message, CCREP_SERVER_INFO);
 		dfunc.GetSocketAddr(acceptsock, &newaddr);
 		MSG_WriteString(&net_message, dfunc.AddrToString(&newaddr));
-		MSG_WriteString(&net_message, name);	// JPG 3.50 changed hostname.string to name
+		MSG_WriteString(&net_message, hostname.string);
 		MSG_WriteString(&net_message, sv.name);
 		MSG_WriteByte(&net_message, net_activeconnections);
 		MSG_WriteByte(&net_message, svs.maxclients);
@@ -1160,17 +891,16 @@ static qsocket_t *_Datagram_CheckNewConnections (void)
 		*((int *)net_message.data) = BigLong(NETFLAG_CTL | (net_message.cursize & NETFLAG_LENGTH_MASK));
 		dfunc.Write (acceptsock, net_message.data, net_message.cursize, &clientaddr);
 		SZ_Clear(&net_message);
-
 		return NULL;
 	}
 
 	if (command == CCREQ_PLAYER_INFO)
 	{
-		int			playerNumber, activeNumber, clientNumber;
-		int         a, b, c;
-		char        address[16];
+		int			playerNumber;
+		int			activeNumber;
+		int			clientNumber;
 		client_t	*client;
-
+		
 		playerNumber = MSG_ReadByte();
 		activeNumber = -1;
 		for (clientNumber = 0, client = svs.clients; clientNumber < svs.maxclients; clientNumber++, client++)
@@ -1194,16 +924,7 @@ static qsocket_t *_Datagram_CheckNewConnections (void)
 		MSG_WriteLong(&net_message, client->colors);
 		MSG_WriteLong(&net_message, (int)client->edict->v.frags);
 		MSG_WriteLong(&net_message, (int)(net_time - client->netconnection->connecttime));
-
-		if (!sv_ipmasking.value) {
 		MSG_WriteString(&net_message, client->netconnection->address);
-		} else {
-			if (sscanf(client->netconnection->address, "%d.%d.%d", &a, &b, &c) == 3) // Baker 3.60 - engine side IP masking
-			snprintf(address, sizeof(address), "%d.%d.%d.xxx", a, b, c);
-			MSG_WriteString(&net_message, address);
-		}
-
-
 		*((int *)net_message.data) = BigLong(NETFLAG_CTL | (net_message.cursize & NETFLAG_LENGTH_MASK));
 		dfunc.Write (acceptsock, net_message.data, net_message.cursize, &clientaddr);
 		SZ_Clear(&net_message);
@@ -1254,57 +975,43 @@ static qsocket_t *_Datagram_CheckNewConnections (void)
 		return NULL;
 	}
 
-	// JPG 3.00 - rcon
-	if (command == CCREQ_RCON)
-	{
-		char pass[2048];	// 2048 = largest possible return from MSG_ReadString
-		char cmd[2048];		// 2048 = largest possible return from MSG_ReadString
-
-		strcpy(pass, MSG_ReadString());
-		strcpy(cmd, MSG_ReadString());
-
-		SZ_Clear(&rcon_message);
-		// save space for the header, filled in later
-		MSG_WriteLong(&rcon_message, 0);
-		MSG_WriteByte(&rcon_message, CCREP_RCON);
-
-		if (!*rcon_password.string)
-			MSG_WriteString(&rcon_message, "rcon is disabled on this server");
-		else if (strcmp(pass, rcon_password.string))
-			MSG_WriteString(&rcon_message, "incorrect password");
-		else
-		{
-			MSG_WriteString(&rcon_message, "");
-			rcon_active = true;
-			Cmd_ExecuteString(cmd, src_command);
-			rcon_active = false;
-		}
-
-		*((int *)rcon_message.data) = BigLong(NETFLAG_CTL | (rcon_message.cursize & NETFLAG_LENGTH_MASK));
-		dfunc.Write (acceptsock, rcon_message.data, rcon_message.cursize, &clientaddr);
-		SZ_Clear(&rcon_message);
-
-		return NULL;
-	}
-
 	if (command != CCREQ_CONNECT)
 		return NULL;
 
-	if (strcmp(MSG_ReadString(), "QUAKE") != 0)
+	if (Q_strcmp(MSG_ReadString(), "QUAKE") != 0)
 		return NULL;
 
 	if (MSG_ReadByte() != NET_PROTOCOL_VERSION)
-		return Datagram_Reject("Incompatible version.\n", acceptsock, &clientaddr);
+	{
+		SZ_Clear(&net_message);
+		// save space for the header, filled in later
+		MSG_WriteLong(&net_message, 0);
+		MSG_WriteByte(&net_message, CCREP_REJECT);
+		MSG_WriteString(&net_message, "Incompatible version.\n");
+		*((int *)net_message.data) = BigLong(NETFLAG_CTL | (net_message.cursize & NETFLAG_LENGTH_MASK));
+		dfunc.Write (acceptsock, net_message.data, net_message.cursize, &clientaddr);
+		SZ_Clear(&net_message);
+		return NULL;
+	}
 
 #ifdef BAN_TEST
 	// check for a ban
 	if (clientaddr.sa_family == AF_INET)
 	{
 		unsigned long testAddr;
-
 		testAddr = ((struct sockaddr_in *)&clientaddr)->sin_addr.s_addr;
 		if ((testAddr & banMask) == banAddr)
-			return Datagram_Reject("You have been banned.\n", acceptsock, &clientaddr);
+		{
+			SZ_Clear(&net_message);
+			// save space for the header, filled in later
+			MSG_WriteLong(&net_message, 0);
+			MSG_WriteByte(&net_message, CCREP_REJECT);
+			MSG_WriteString(&net_message, "You have been banned.\n");
+			*((int *)net_message.data) = BigLong(NETFLAG_CTL | (net_message.cursize & NETFLAG_LENGTH_MASK));
+			dfunc.Write (acceptsock, net_message.data, net_message.cursize, &clientaddr);
+			SZ_Clear(&net_message);
+			return NULL;
+		}
 	}
 #endif
 
@@ -1316,7 +1023,7 @@ static qsocket_t *_Datagram_CheckNewConnections (void)
 		ret = dfunc.AddrCompare(&clientaddr, &s->addr);
 		if (ret >= 0)
 		{
-			// is this a duplicate connection request?
+			// is this a duplicate connection reqeust?
 			if (ret == 0 && net_time - s->connecttime < 2.0)
 			{
 				// yes, so send a duplicate reply
@@ -1329,44 +1036,30 @@ static qsocket_t *_Datagram_CheckNewConnections (void)
 				*((int *)net_message.data) = BigLong(NETFLAG_CTL | (net_message.cursize & NETFLAG_LENGTH_MASK));
 				dfunc.Write (acceptsock, net_message.data, net_message.cursize, &clientaddr);
 				SZ_Clear(&net_message);
-
 				return NULL;
 			}
 			// it's somebody coming back in from a crash/disconnect
 			// so close the old qsocket and let their retry get them back in
-			//NET_Close(s);  // JPG - finally got rid of the worst mistake in Quake
-			//return NULL;
+			NET_Close(s);
+			return NULL;
 		}
 	}
-#ifdef PROQUAKE_EXTENSION
-	// JPG - support for mods
-	if (len > 12)
-		mod = MSG_ReadByte();
-	else if (!qsmackActive && clientaddr.sa_family == AF_INET && ((struct sockaddr_in *)&clientaddr)->sin_addr.s_addr == qsmackAddr)
-		mod = MOD_QSMACK;
-	else
-		mod = MOD_NONE;
-	if (len > 13)
-		mod_version = MSG_ReadByte();
-	else
-		mod_version = 0;
-	if (len > 14)
-		mod_flags = MSG_ReadByte();
-	else
-		mod_flags = 0;
-	if (mod != MOD_QSMACK)
-	{
-		if (pq_password.value && (len <= 18 || pq_password.value != MSG_ReadLong()))
-			return Datagram_Reject("Óåòöåò éó ðáóó÷ïòä ðòïôåãôåäŸ\nYou must use ProQuake v3.1 or above\n(http://www.quakeone.com/proquake) and set pq_password to the server password\n", acceptsock, &clientaddr);
-		if (pq_cheatfree && (mod != MOD_PROQUAKE || mod_version < 32))
-			return Datagram_Reject("Ôèéó éó á ãèåáô­æòåå óåòöåòŸ\nYou must use ProQuake v3.2 or above\n(http://www.quakeone.com/proquake)\n", acceptsock, &clientaddr);
-	}
-#endif
 
 	// allocate a QSocket
 	sock = NET_NewQSocket ();
 	if (sock == NULL)
-		return Datagram_Reject("Server is full.\n", acceptsock, &clientaddr);
+	{
+		// no room; try to let him know
+		SZ_Clear(&net_message);
+		// save space for the header, filled in later
+		MSG_WriteLong(&net_message, 0);
+		MSG_WriteByte(&net_message, CCREP_REJECT);
+		MSG_WriteString(&net_message, "Server is full.\n");
+		*((int *)net_message.data) = BigLong(NETFLAG_CTL | (net_message.cursize & NETFLAG_LENGTH_MASK));
+		dfunc.Write (acceptsock, net_message.data, net_message.cursize, &clientaddr);
+		SZ_Clear(&net_message);
+		return NULL;
+	}
 
 	// allocate a network socket
 	newsock = dfunc.OpenSocket(0);
@@ -1383,21 +1076,12 @@ static qsocket_t *_Datagram_CheckNewConnections (void)
 		NET_FreeQSocket(sock);
 		return NULL;
 	}
-#ifdef PROQUAKE_EXTENSION
-	// JPG - support for mods
-	sock->mod = mod;
-	sock->mod_version = mod_version;
-	sock->mod_flags = mod_flags;
-	if (mod == MOD_PROQUAKE && mod_version >= 34)
-		sock->net_wait = true;		// JPG 3.40 - NAT fix
-	sock->encrypt = 2;	// JPG 3.50
-#endif
 
-	// everything is allocated, just fill in the details
+	// everything is allocated, just fill in the details	
 	sock->socket = newsock;
 	sock->landriver = net_landriverlevel;
 	sock->addr = clientaddr;
-	strcpy(sock->address, dfunc.AddrToString(&clientaddr));
+	Q_strcpy(sock->address, dfunc.AddrToString(&clientaddr));
 
 	// send him back the info about the server connection he has been allocated
 	SZ_Clear(&net_message);
@@ -1405,21 +1089,8 @@ static qsocket_t *_Datagram_CheckNewConnections (void)
 	MSG_WriteLong(&net_message, 0);
 	MSG_WriteByte(&net_message, CCREP_ACCEPT);
 	dfunc.GetSocketAddr(newsock, &newaddr);
-	sock->client_port = dfunc.GetSocketPort(&newaddr);
-	MSG_WriteLong(&net_message, sock->client_port);
-#ifdef PROQUAKE_EXTENSION
-	MSG_WriteByte(&net_message, MOD_PROQUAKE); // JPG - added this
-	MSG_WriteByte(&net_message, 10 * PROQUAKE_SERIES_VERSION);	// JPG 3.00
-#if defined(CHEATFREE_CAPABLE)
-	if (pq_cheatfree)
-	{
-		MSG_WriteByte(&net_message, PQF_CHEATFREE);
-		MSG_WriteLong(&net_message, _lrotl(net_seed, 17));
-	}
-	else
-#endif
-		MSG_WriteByte(&net_message, 0);
-#endif
+	MSG_WriteLong(&net_message, dfunc.GetSocketPort(&newaddr));
+//	MSG_WriteString(&net_message, dfunc.AddrToString(&newaddr));
 	*((int *)net_message.data) = BigLong(NETFLAG_CTL | (net_message.cursize & NETFLAG_LENGTH_MASK));
 	dfunc.Write (acceptsock, net_message.data, net_message.cursize, &clientaddr);
 	SZ_Clear(&net_message);
@@ -1435,16 +1106,18 @@ qsocket_t *Datagram_CheckNewConnections (void)
 		if (net_landrivers[net_landriverlevel].initialized)
 			if ((ret = _Datagram_CheckNewConnections ()) != NULL)
 				break;
-
 	return ret;
 }
 
 
 static void _Datagram_SearchForHosts (qboolean xmit)
 {
-	int		i, n, ret, control;
+	int		ret;
+	int		n;
+	int		i;
 	struct qsockaddr readaddr;
 	struct qsockaddr myaddr;
+	int		control;
 
 	dfunc.GetSocketAddr (dfunc.controlSock, &myaddr);
 	if (xmit)
@@ -1488,7 +1161,6 @@ static void _Datagram_SearchForHosts (qboolean xmit)
 			continue;
 
 		dfunc.GetAddrFromName(MSG_ReadString(), &readaddr);
-
 		// search the cache for this server
 		for (n = 0; n < hostCacheCount; n++)
 			if (dfunc.AddrCompare(&readaddr, &hostcache[n].addr) == 0)
@@ -1500,39 +1172,37 @@ static void _Datagram_SearchForHosts (qboolean xmit)
 
 		// add it
 		hostCacheCount++;
-		strcpy(hostcache[n].name, MSG_ReadString());
-		strcpy(hostcache[n].map, MSG_ReadString());
+		Q_strcpy(hostcache[n].name, MSG_ReadString());
+		Q_strcpy(hostcache[n].map, MSG_ReadString());
 		hostcache[n].users = MSG_ReadByte();
 		hostcache[n].maxusers = MSG_ReadByte();
 		if (MSG_ReadByte() != NET_PROTOCOL_VERSION)
 		{
-			strcpy(hostcache[n].cname, hostcache[n].name);
+			Q_strcpy(hostcache[n].cname, hostcache[n].name);
 			hostcache[n].cname[14] = 0;
-			strcpy(hostcache[n].name, "*");
-			strlcat (hostcache[n].name, hostcache[n].cname, sizeof(hostcache[n].name));
+			Q_strcpy(hostcache[n].name, "*");
+			Q_strcat(hostcache[n].name, hostcache[n].cname);
 		}
-		memcpy(&hostcache[n].addr, &readaddr, sizeof(struct qsockaddr));
+		Q_memcpy(&hostcache[n].addr, &readaddr, sizeof(struct qsockaddr));
 		hostcache[n].driver = net_driverlevel;
 		hostcache[n].ldriver = net_landriverlevel;
-		strcpy(hostcache[n].cname, dfunc.AddrToString(&readaddr));
+		Q_strcpy(hostcache[n].cname, dfunc.AddrToString(&readaddr));
 
 		// check for a name conflict
 		for (i = 0; i < hostCacheCount; i++)
 		{
 			if (i == n)
 				continue;
-			if (strcasecmp (hostcache[n].name, hostcache[i].name) == 0)
+			if (Q_strcasecmp (hostcache[n].name, hostcache[i].name) == 0)
 			{
-				i = strlen(hostcache[n].name);
+				i = Q_strlen(hostcache[n].name);
 				if (i < 15 && hostcache[n].name[i-1] > '8')
 				{
 					hostcache[n].name[i] = '0';
 					hostcache[n].name[i+1] = 0;
 				}
 				else
-				{
 					hostcache[n].name[i-1]++;
-				}
 				i = -1;
 			}
 		}
@@ -1558,11 +1228,6 @@ static qsocket_t *_Datagram_Connect (char *host)
 	qsocket_t	*sock;
 	int			newsock;
 	int			ret;
-#ifdef PROQUAKE_EXTENSION
-	int			clientsock;	// JPG 3.40 - added clientsock
-	int			len; // JPG - added len
-#endif
-
 	int			reps;
 	double		start_time;
 	int			control;
@@ -1570,10 +1235,7 @@ static qsocket_t *_Datagram_Connect (char *host)
 
 	// see if we can resolve the host name
 	if (dfunc.GetAddrFromName(host, &sendaddr) == -1)
-	{
-		Con_Printf("Could not resolve %s\n", host);	// JPG 3.20 - added this
 		return NULL;
-	}
 
 	newsock = dfunc.OpenSocket (0);
 	if (newsock == -1)
@@ -1582,7 +1244,6 @@ static qsocket_t *_Datagram_Connect (char *host)
 	sock = NET_NewQSocket ();
 	if (sock == NULL)
 		goto ErrorReturn2;
-
 	sock->socket = newsock;
 	sock->landriver = net_landriverlevel;
 
@@ -1591,8 +1252,7 @@ static qsocket_t *_Datagram_Connect (char *host)
 		goto ErrorReturn;
 
 	// send the connection request
-	Con_Printf("trying...\n");
-	SCR_UpdateScreen ();
+	Con_Printf("trying...\n"); SCR_UpdateScreen ();
 	start_time = net_time;
 
 	for (reps = 0; reps < 3; reps++)
@@ -1603,40 +1263,12 @@ static qsocket_t *_Datagram_Connect (char *host)
 		MSG_WriteByte(&net_message, CCREQ_CONNECT);
 		MSG_WriteString(&net_message, "QUAKE");
 		MSG_WriteByte(&net_message, NET_PROTOCOL_VERSION);
-#ifdef PROQUAKE_EXTENSION
-		MSG_WriteByte(&net_message, MOD_PROQUAKE);			// JPG - added this
-		MSG_WriteByte(&net_message, PROQUAKE_SERIES_VERSION * 10);	// JPG 3.00 - added this
-		MSG_WriteByte(&net_message, 0);						// JPG 3.00 - added this (flags)
-		MSG_WriteLong(&net_message, pq_password.value);		// JPG 3.00 - password protected servers
-#endif
 		*((int *)net_message.data) = BigLong(NETFLAG_CTL | (net_message.cursize & NETFLAG_LENGTH_MASK));
 		dfunc.Write (newsock, net_message.data, net_message.cursize, &sendaddr);
 		SZ_Clear(&net_message);
 		do
 		{
 			ret = dfunc.Read (newsock, net_message.data, net_message.maxsize, &readaddr);
-
-
-			#ifdef MACOSX_NETWORK_DIFFERENCE
-                        // work around for an OS bug...
-                        if (sfunc.AddrCompare(&readaddr, &sendaddr) != 0)
-                        {
-                            char 	mySendName[NET_NAMELEN];
-                            char 	myReadName[NET_NAMELEN];
-
-                            dfunc.GetNameFromAddr (&sendaddr, mySendName);
-                            dfunc.GetNameFromAddr (&readaddr, myReadName);
-
-                            if (strcasecmp (mySendName, myReadName) == 0)
-                            {
-                                Con_Printf ("Patching server address!\n");
-                                sendaddr = readaddr;
-                            }
-                        }
-			#endif /* MACOSX */
-
-
-
 			// if we got something, validate it
 			if (ret > 0)
 			{
@@ -1680,17 +1312,12 @@ static qsocket_t *_Datagram_Connect (char *host)
 					continue;
 				}
 			}
-#ifdef PSP_NETWORKING_CODE
 			sceKernelDelayThread(10);
-#define NETWORK_CONNECT_TIMEOUT 5.5
-#else
-#define NETWORK_CONNECT_TIMEOUT 2.5
-#endif
-		} while (ret == 0 && (SetNetTime() - start_time) < NETWORK_CONNECT_TIMEOUT);
+		}
+		while (ret == 0 && (SetNetTime() - start_time) < 5.5);
 		if (ret)
 			break;
-		Con_Printf("still trying...\n");
-		SCR_UpdateScreen ();
+		Con_Printf("still trying...\n"); SCR_UpdateScreen ();
 		start_time = SetNetTime();
 	}
 
@@ -1698,8 +1325,7 @@ static qsocket_t *_Datagram_Connect (char *host)
 	{
 		reason = "No Response";
 		Con_Printf("%s\n", reason);
-		strcpy(m_return_reason, reason);
-
+		Q_strcpy(m_return_reason, reason);
 		goto ErrorReturn;
 	}
 
@@ -1707,71 +1333,29 @@ static qsocket_t *_Datagram_Connect (char *host)
 	{
 		reason = "Network Error";
 		Con_Printf("%s\n", reason);
-		strcpy(m_return_reason, reason);
-
+		Q_strcpy(m_return_reason, reason);
 		goto ErrorReturn;
 	}
-#ifdef PROQUAKE_EXTENSION
-	len = ret; // JPG - save length for ProQuake connections
-#endif
+
 	ret = MSG_ReadByte();
 	if (ret == CCREP_REJECT)
 	{
 		reason = MSG_ReadString();
 		Con_Printf(reason);
-		strncpy(m_return_reason, reason, 31);
-
+		Q_strncpy(m_return_reason, reason, 31);
 		goto ErrorReturn;
 	}
 
 	if (ret == CCREP_ACCEPT)
 	{
-		sock->client_port = MSG_ReadLong();
-		memcpy(&sock->addr, &sendaddr, sizeof(struct qsockaddr));
-		dfunc.SetSocketPort (&sock->addr, sock->client_port);
-#ifdef PROQUAKE_EXTENSION
-		// JPG - support for mods
-		if (len > 9)
-			sock->mod = MSG_ReadByte();
-		else
-			sock->mod = MOD_NONE;
-		// JPG 3.00 - version and flags
-		if (len > 10)
-			sock->mod_version = MSG_ReadByte();
-		else
-			sock->mod_version = 0;
-		if (len > 11)
-			sock->mod_flags = MSG_ReadByte();
-		else
-			sock->mod_flags = 0;
-		if (sock->mod == MOD_PROQUAKE && (sock->mod_flags & PQF_CHEATFREE))
-		{
-			if (pq_cheatfreeEnabled)
-			{
-				pq_cheatfree = true;
-				net_seed = MSG_ReadLong();
-#ifdef SUPPORTS_CHEATFREE_MODE
-				Security_SetSeed(net_seed, argv[0]);
-#endif
-			}
-			else
-			{
-				reason = "Could not initialize security module";
-				Con_Printf("%s\n", reason);
-				strcpy(m_return_reason, reason);
-				goto ErrorReturn;
-			}
-		}
-		else
-			pq_cheatfree = false;
-#endif
+		Q_memcpy(&sock->addr, &sendaddr, sizeof(struct qsockaddr));
+		dfunc.SetSocketPort (&sock->addr, MSG_ReadLong());
 	}
 	else
 	{
 		reason = "Bad Response";
 		Con_Printf("%s\n", reason);
-		strcpy(m_return_reason, reason);
-
+		Q_strcpy(m_return_reason, reason);
 		goto ErrorReturn;
 	}
 
@@ -1780,28 +1364,12 @@ static qsocket_t *_Datagram_Connect (char *host)
 	Con_Printf ("Connection accepted\n");
 	sock->lastMessageTime = SetNetTime();
 
-#ifdef PROQUAKE_EXTENSION
-	// JPG 3.40 - make NAT work by opening a new socket
-	if (sock->mod == MOD_PROQUAKE && sock->mod_version >= 34)
-	{
-		clientsock = dfunc.OpenSocket (0);
-		if (clientsock == -1)
-			goto ErrorReturn;
-		dfunc.CloseSocket(newsock);
-		newsock = clientsock;
-		sock->socket = newsock;
-	}
-
-	sock->encrypt = 2;	// JPG 3.50
-#endif
-
 	// switch the connection to the specified address
 	if (dfunc.Connect (newsock, &sock->addr) == -1)
 	{
 		reason = "Connect to Game failed";
 		Con_Printf("%s\n", reason);
-		strcpy(m_return_reason, reason);
-
+		Q_strcpy(m_return_reason, reason);
 		goto ErrorReturn;
 	}
 
@@ -1810,16 +1378,14 @@ static qsocket_t *_Datagram_Connect (char *host)
 
 ErrorReturn:
 	NET_FreeQSocket(sock);
-
 ErrorReturn2:
 	dfunc.CloseSocket(newsock);
 	if (m_return_onerror)
 	{
 		key_dest = key_menu;
-		menu_state = m_return_state;
+		m_state = m_return_state;
 		m_return_onerror = false;
 	}
-
 	return NULL;
 }
 
@@ -1827,11 +1393,9 @@ qsocket_t *Datagram_Connect (char *host)
 {
 	qsocket_t *ret = NULL;
 
-	Strip_Port(host);
 	for (net_landriverlevel = 0; net_landriverlevel < net_numlandrivers; net_landriverlevel++)
 		if (net_landrivers[net_landriverlevel].initialized)
 			if ((ret = _Datagram_Connect (host)) != NULL)
 				break;
-
 	return ret;
 }

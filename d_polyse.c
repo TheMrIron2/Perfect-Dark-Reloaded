@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -21,12 +21,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // texture (used for Alias models)
 
 #include "quakedef.h"
-//#include "r_local.h"
+#include "r_local.h"
 #include "d_local.h"
 
 // TODO: put in span spilling to shrink list size
 // !!! if this is changed, it must be changed in d_polysa.s too !!!
-#define DPS_MAXSPANS			MAXHEIGHT+1
+#define DPS_MAXSPANS			MAXHEIGHT+1	
 									// 1 extra for spanpackage that marks end
 
 // !!! if this is changed, it must be changed in asm_draw.h too !!!
@@ -164,7 +164,7 @@ void D_PolysetDrawFinalVerts (finalvert_t *fv, int numverts)
 			if (z >= *zbuf)
 			{
 				int		pix;
-
+				
 				*zbuf = z;
 				pix = skintable[fv->v[3]>>16][fv->v[2]>>16];
 				pix = ((byte *)acolormap)[pix + (fv->v[4] & 0xFF00) ];
@@ -199,7 +199,7 @@ void D_DrawSubdiv (void)
 
 		if (((index0->v[1]-index1->v[1]) *
 			 (index0->v[0]-index2->v[0]) -
-			 (index0->v[0]-index1->v[0]) *
+			 (index0->v[0]-index1->v[0]) * 
 			 (index0->v[1]-index2->v[1])) >= 0)
 		{
 			continue;
@@ -374,7 +374,7 @@ split:
 	if (z >= *zbuf)
 	{
 		int		pix;
-
+		
 		*zbuf = z;
 		pix = d_pcolormap[skintable[new[3]>>16][new[2]>>16]];
 		d_viewbuffer[d_scantable[new[1]] + new[0]] = pix;
@@ -386,7 +386,7 @@ nodraw:
 	D_PolysetRecursiveTriangle (lp3, new, lp2);
 }
 
-#endif // NO_ASSEMBLY (formerly !id386)
+#endif	// !id386
 
 
 /*
@@ -398,7 +398,7 @@ void D_PolysetUpdateTables (void)
 {
 	int		i;
 	byte	*s;
-
+	
 	if (r_affinetridesc.skinwidth != skinwidth ||
 		r_affinetridesc.pskin != skinstart)
 	{
@@ -479,7 +479,7 @@ void D_PolysetScanLeftEdge (int height)
 	} while (--height);
 }
 
-#endif // NO_ASSEMBLY (formerly !id386)
+#endif	// !id386
 
 
 /*
@@ -490,7 +490,7 @@ D_PolysetSetUpForLineScan
 void D_PolysetSetUpForLineScan(fixed8_t startvertu, fixed8_t startvertv,
 		fixed8_t endvertu, fixed8_t endvertv)
 {
-	double		dm, dn;
+	float		dm, dn;
 	int			tm, tn;
 	adivtab_t	*ptemp;
 
@@ -511,8 +511,8 @@ void D_PolysetSetUpForLineScan(fixed8_t startvertu, fixed8_t startvertv,
 	}
 	else
 	{
-		dm = (double)tm;
-		dn = (double)tn;
+		dm = (float)tm;
+		dn = (float)tn;
 
 		FloorDivMod (dm, dn, &ubasestep, &erroradjustup);
 
@@ -542,15 +542,15 @@ void D_PolysetCalcGradients (int skinwidth)
 
 	ystepdenominv = -xstepdenominv;
 
-// ceil () for light so positive steps are exaggerated, negative steps
+// ceilf () for light so positive steps are exaggerated, negative steps
 // diminished,  pushing us away from underflow toward overflow. Underflow is
 // very visible, overflow is very unlikely, because of ambient lighting
 	t0 = r_p0[4] - r_p2[4];
 	t1 = r_p1[4] - r_p2[4];
 	r_lstepx = (int)
-			ceil((t1 * p01_minus_p21 - t0 * p11_minus_p21) * xstepdenominv);
+			ceilf((t1 * p01_minus_p21 - t0 * p11_minus_p21) * xstepdenominv);
 	r_lstepy = (int)
-			ceil((t1 * p00_minus_p20 - t0 * p10_minus_p20) * ystepdenominv);
+			ceilf((t1 * p00_minus_p20 - t0 * p10_minus_p20) * ystepdenominv);
 
 	t0 = r_p0[2] - r_p2[2];
 	t1 = r_p1[2] - r_p2[2];
@@ -584,7 +584,7 @@ void D_PolysetCalcGradients (int skinwidth)
 	a_ststepxwhole = skinwidth * (r_tstepx >> 16) + (r_sstepx >> 16);
 }
 
-#endif // NO_ASSEMBLY (formerly !id386)
+#endif	// !id386
 
 
 #if 0
@@ -674,7 +674,7 @@ void D_PolysetDrawSpans8 (spanpackage_t *pspanpackage)
 		pspanpackage++;
 	} while (pspanpackage->count != -999999);
 }
-#endif // NO_ASSEMBLY (formerly !id386)
+#endif	// !id386
 
 
 /*
@@ -721,8 +721,9 @@ D_RasterizeAliasPolySmooth
 */
 void D_RasterizeAliasPolySmooth (void)
 {
-	int				initialleftheight, initialrightheight, working_lstepx, originalcount;
+	int				initialleftheight, initialrightheight;
 	int				*plefttop, *prighttop, *pleftbottom, *prightbottom;
+	int				working_lstepx, originalcount;
 
 	plefttop = pedgetable->pleftedgevert0;
 	prighttop = pedgetable->prightedgevert0;
@@ -733,20 +734,26 @@ void D_RasterizeAliasPolySmooth (void)
 	initialleftheight = pleftbottom[1] - plefttop[1];
 	initialrightheight = prightbottom[1] - prighttop[1];
 
+//
 // set the s, t, and light gradients, which are consistent across the triangle
 // because being a triangle, things are affine
+//
 	D_PolysetCalcGradients (r_affinetridesc.skinwidth);
 
+//
 // rasterize the polygon
+//
 
+//
 // scan out the top (and possibly only) part of the left edge
-
+//
 	d_pedgespanpackage = a_spans;
 
 	ystart = plefttop[1];
 	d_aspancount = plefttop[0] - prighttop[0];
 
-	d_ptex = (byte *)r_affinetridesc.pskin + (plefttop[2] >> 16) + (plefttop[3] >> 16) * r_affinetridesc.skinwidth;
+	d_ptex = (byte *)r_affinetridesc.pskin + (plefttop[2] >> 16) +
+			(plefttop[3] >> 16) * r_affinetridesc.skinwidth;
 #if	id386
 	d_sfrac = (plefttop[2] & 0xFFFF) << 16;
 	d_tfrac = (plefttop[3] & 0xFFFF) << 16;
@@ -797,7 +804,7 @@ void D_RasterizeAliasPolySmooth (void)
 
 	// for negative steps in x along left edge, bias toward overflow rather than
 	// underflow (sort of turning the floor () we did in the gradient calcs into
-	// ceil (), but plus a little bit)
+	// ceilf (), but plus a little bit)
 		if (ubasestep < 0)
 			working_lstepx = r_lstepx - 1;
 		else
@@ -833,7 +840,9 @@ void D_RasterizeAliasPolySmooth (void)
 		D_PolysetScanLeftEdge (initialleftheight);
 	}
 
+//
 // scan out the bottom part of the left edge, if it exists
+//
 	if (pedgetable->numleftedges == 2)
 	{
 		int		height;
@@ -976,8 +985,10 @@ void D_PolysetSetEdgeTable (void)
 	edgetableindex = 0;	// assume the vertices are already in
 						//  top to bottom order
 
+//
 // determine which edges are right & left, and the order in which
 // to rasterize them
+//
 	if (r_p0[1] >= r_p1[1])
 	{
 		if (r_p0[1] == r_p1[1])
@@ -1031,7 +1042,7 @@ void D_PolysetRecursiveDrawLine (int *lp1, int *lp2)
 	int		d;
 	int		new[6];
 	int 	ofs;
-
+	
 	d = lp2[0] - lp1[0];
 	if (d < -1 || d > 1)
 		goto split;
@@ -1055,7 +1066,7 @@ split:
 	if (new[5] > d_pzbuffer[ofs])
 	{
 		int		pix;
-
+		
 		d_pzbuffer[ofs] = new[5];
 		pix = skintable[new[3]>>16][new[2]>>16];
 //		pix = ((byte *)acolormap)[pix + (new[4] & 0xFF00)];
@@ -1071,7 +1082,7 @@ void D_PolysetRecursiveTriangle2 (int *lp1, int *lp2, int *lp3)
 {
 	int		d;
 	int		new[4];
-
+	
 	d = lp2[0] - lp1[0];
 	if (d < -1 || d > 1)
 		goto split;

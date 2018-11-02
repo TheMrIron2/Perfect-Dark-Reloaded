@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 struct qsockaddr
 {
-#ifdef PSP_NETWORKING_CODE
+#ifdef PSP
 	unsigned char sa_len;
 	unsigned char sa_family;
 #else
@@ -33,12 +33,7 @@ struct qsockaddr
 
 #define	NET_NAMELEN			64
 
-#ifdef FITZQUAKE_PROTOCOL
-#define NET_MAXMESSAGE		32000 //johnfitz -- was 8192
-#define NET_NETQUAKE_MAXMESSAGE 8192
-#else
 #define NET_MAXMESSAGE		8192
-#endif
 #define NET_HEADERSIZE		(2 * sizeof(unsigned int))
 #define NET_DATAGRAMSIZE	(MAX_DATAGRAM + NET_HEADERSIZE)
 
@@ -119,26 +114,12 @@ struct qsockaddr
 #define CCREQ_SERVER_INFO	0x02
 #define CCREQ_PLAYER_INFO	0x03
 #define CCREQ_RULE_INFO		0x04
-#define CCREQ_RCON			0x05
 
 #define CCREP_ACCEPT		0x81
 #define CCREP_REJECT		0x82
 #define CCREP_SERVER_INFO	0x83
 #define CCREP_PLAYER_INFO	0x84
 #define CCREP_RULE_INFO		0x85
-#define CCREP_RCON			0x86
-
-// JPG - support for mods
-#define MOD_NONE			0x00
-#define MOD_PROQUAKE		0x01
-#define MOD_QSMACK			0x02
-
-// JPG 3.20 - flags
-#define PQF_CHEATFREE		1
-
-// JPG 3.00 - rcon
-extern sizebuf_t	rcon_message;
-extern qboolean		rcon_active;
 
 typedef struct qsocket_s
 {
@@ -150,7 +131,7 @@ typedef struct qsocket_s
 	qboolean		disconnected;
 	qboolean		canSend;
 	qboolean		sendNext;
-
+	
 	int				driver;
 	int				landriver;
 	int				socket;
@@ -170,13 +151,6 @@ typedef struct qsocket_s
 	struct qsockaddr	addr;
 	char				address[NET_NAMELEN];
 
-	// JPG - new stuff here (must be after address for crmod compatibility)
-	byte			mod;
-	byte			mod_version;	// = floor(version * 10) (must fit in one byte)
-	byte			mod_flags;
-	int				client_port;
-	qboolean		net_wait;		// JPG 3.40 - wait for the client to send a packet to the private port
-	byte			encrypt;		// JPG 3.50
 } qsocket_t;
 
 extern qsocket_t	*net_activeSockets;
@@ -269,7 +243,7 @@ typedef struct
 extern int hostCacheCount;
 extern hostcache_t hostcache[HOSTCACHESIZE];
 
-#if !defined(_WIN32 ) && !defined (LINUX)
+#if !defined(WIN32 ) && !defined (__linux__) && !defined (__sun__)
 #ifndef htonl
 extern unsigned long htonl (unsigned long hostlong);
 #endif
@@ -282,6 +256,10 @@ extern unsigned long ntohl (unsigned long netlong);
 #ifndef ntohs
 extern unsigned short ntohs (unsigned short netshort);
 #endif
+#endif
+
+#ifdef IDGODS
+qboolean IsID(struct qsockaddr *addr);
 #endif
 
 //============================================================================
@@ -350,9 +328,8 @@ void SchedulePollProcedure(PollProcedure *pp, double timeOffset);
 extern	qboolean	serialAvailable;
 extern	qboolean	ipxAvailable;
 extern	qboolean	tcpipAvailable;
-#ifdef PSP_NETWORKING_CODE
 extern	qboolean	tcpipAdhoc;
-#endif
+
 extern	char		my_ipx_address[NET_NAMELEN];
 extern	char		my_tcpip_address[NET_NAMELEN];
 extern void (*GetComPortConfig) (int portNumber, int *port, int *irq, int *baud, qboolean *useModem);

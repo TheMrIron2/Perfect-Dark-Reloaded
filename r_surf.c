@@ -20,8 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // r_surf.c: surface-related refresh code
 
 #include "quakedef.h"
-//#include "r_local.h"
-#include "d_local.h"
+#include "r_local.h"
 
 drawsurf_t	r_drawsurf;
 
@@ -50,325 +49,9 @@ static void	(*surfmiptable[4])(void) = {
 	R_DrawSurfaceBlock8_mip3
 };
 
+
+
 unsigned		blocklights[18*18];
-
-#ifdef SUPPORTS_SOFTWARE_FTESTAIN
-//qbism ftestain begin
-extern cvar_t r_stains;
-extern cvar_t r_stainfadetime;
-extern cvar_t r_stainfadeamount;
-
-#define	LMBLOCK_WIDTH		128
-#define	LMBLOCK_HEIGHT		128
-#define MAX_LIGHTMAPS		256// qbism was 64
-
-#ifdef FITZQUAKE_PROTOCOL
-#define MAX_LIGHTMAPS 256 //johnfitz -- was 64
-#define MAX_NETQUAKE_LIGHTMAPS 64
-#else
-#define	MAX_LIGHTMAPS		256 // qbism was 64
-#endif
-
-typedef unsigned char stmap;
-stmap stainmaps[MAX_LIGHTMAPS*LMBLOCK_WIDTH*LMBLOCK_HEIGHT];	//added to lightmap for added (hopefully) speed.
-int			allocated[MAX_LIGHTMAPS][LMBLOCK_WIDTH];
-
-//radius, x y z, a
-void R_StainSurf (msurface_t *surf, float *parms)
-{	
-	int			sd, td;
-	float		dist, rad, minlight;
-	vec3_t		impact, local;
-	int			s, t;
-	int			i;
-	int			smax, tmax;
-	float amm;
-	int lim;
-	mtexinfo_t	*tex;
-
-	stmap *stainbase;
-
-	lim = 255 - (r_stains.value*255);
-
-	smax = (surf->extents[0]>>4)+1;
-	tmax = (surf->extents[1]>>4)+1;
-	tex = surf->texinfo;
-
-	stainbase = stainmaps + surf->lightmaptexturenum*LMBLOCK_WIDTH*LMBLOCK_HEIGHT;
-	stainbase += (surf->light_t * LMBLOCK_WIDTH + surf->light_s);
-
-	rad = *parms;
-	dist = DotProduct ((parms+1), surf->plane->normal) - surf->plane->dist;
-	rad -= fabs(dist);
-	minlight = 0;
-	if (rad < minlight)	//not hit
-		return;
-	minlight = rad - minlight;
-
-	for (i=0 ; i<3 ; i++)
-	{
-		impact[i] = (parms+1)[i] - surf->plane->normal[i]*dist;
-	}
-
-	local[0] = DotProduct (impact, tex->vecs[0]) + tex->vecs[0][3];
-	local[1] = DotProduct (impact, tex->vecs[1]) + tex->vecs[1][3];
-
-	local[0] -= surf->texturemins[0];
-	local[1] -= surf->texturemins[1];		
-	
-	for (t = 0 ; t<tmax ; t++)
-	{
-		td = local[1] - t*16;
-		if (td < 0)
-			td = -td;
-		for (s=0 ; s<smax ; s++)
-		{
-			sd = local[0] - s*16;
-			if (sd < 0)
-				sd = -sd;
-			if (sd > td)
-				dist = sd + (td>>1);
-			else
-				dist = td + (sd>>1);
-			if (dist < minlight)
-			{
-				amm = stainbase[(s)] - (dist - rad)*parms[4];
-				stainbase[(s)] = bound(lim, amm, 255);
-
-				surf->stained = true;
-			}
-		}
-		stainbase += LMBLOCK_WIDTH;
-	}
-
-	if (surf->stained)
-	{
-		for (i = 0; i < 4; i++)
-			if (surf->cachespots[i])
-				surf->cachespots[i]->dlight = -1;			
-	}
-}
-
-//combination of R_AddDynamicLights and R_MarkLights
-void R_Q1BSP_StainNode (mnode_t *node, float *parms)
-{
-	mplane_t	*splitplane;
-	float		dist;
-	msurface_t	*surf;
-	int			i;
-	
-	if (node->contents < 0)
-		return;	
-
-	splitplane = node->plane;
-	dist = DotProduct ((parms+1), splitplane->normal) - splitplane->dist;
-	
-	if (dist > (*parms))
-	{
-		R_Q1BSP_StainNode (node->children[0], parms);
-		return;
-	}
-	if (dist < (-*parms))
-	{
-		R_Q1BSP_StainNode (node->children[1], parms);
-		return;
-	}
-
-// mark the polygons
-	surf = cl.worldmodel->surfaces + node->firstsurface;
-	for (i=0 ; i<node->numsurfaces ; i++, surf++)
-	{
-		if (surf->flags&~(SURF_DRAWTURB|SURF_PLANEBACK))
-			continue;
-		R_StainSurf(surf, parms);
-	}
-
-	R_Q1BSP_StainNode (node->children[0], parms);
-	R_Q1BSP_StainNode (node->children[1], parms);
-}
-
-void R_AddStain(vec3_t org, float tint, float radius)
-{
-	entity_t *pe;
-	int i;
-	float parms[5];
-
-	if (r_stains.value <= 0 || !cl.worldmodel)
-		return;
-	parms[0] = radius;
-	parms[1] = org[0];
-	parms[2] = org[1];
-	parms[3] = org[2];
-	parms[4] = tint;
-
-	R_Q1BSP_StainNode(cl.worldmodel->nodes+cl.worldmodel->hulls[0].firstclipnode, parms);
-
-	//now stain bsp models other than world.
-	for (i=1 ; i< cl.num_entities ; i++)	//0 is world...
-	{
-		pe = &cl_entities[i];	
-		if (pe->model && pe->model->surfaces == cl.worldmodel->surfaces)
-		{
-			parms[1] = org[0] - pe->origin[0];
-			parms[2] = org[1] - pe->origin[1];
-			parms[3] = org[2] - pe->origin[2];
-			R_Q1BSP_StainNode(pe->model->nodes+pe->model->hulls[0].firstclipnode, parms);
-		}
-	}
-}
-
-void R_WipeStains(void)
-{
-	memset(stainmaps, 255, sizeof(stainmaps));
-}
-
-void R_LessenStains(void)
-{
-	int i, j;
-	msurface_t	*surf;
-
-	int			smax, tmax;
-	int			s, t;
-	stmap *stain;
-	int stride;
-	int amount, limit;
-
-	static float time;
-
-	if (r_stains.value <= 0 || cl.paused)
-	{
-		time = 0;
-		return;	
-	}
-
-	time += host_frametime;
-	if (time < r_stainfadetime.value)
-		return;
-	time-=r_stainfadetime.value;
-
-	amount = r_stainfadeamount.value;
-	limit = 255 - amount;
-
-	surf = cl.worldmodel->surfaces;
-	for (i=0 ; i<cl.worldmodel->numsurfaces ; i++, surf++)
-	{
-		if (surf->stained)
-		{
-			for (j = 0; j < 4; j++)
-				if (surf->cachespots[j])
-					surf->cachespots[j]->dlight = -1;
-
-			smax = (surf->extents[0]>>4)+1;
-			tmax = (surf->extents[1]>>4)+1;	
-
-			stain = stainmaps + surf->lightmaptexturenum*LMBLOCK_WIDTH*LMBLOCK_HEIGHT;
-			stain += (surf->light_t * LMBLOCK_WIDTH + surf->light_s);
-
-			stride = (LMBLOCK_WIDTH-smax);
-
-			surf->stained = false;			
-
-			for (t = 0 ; t<tmax ; t++, stain+=stride)
-			{
-				for (s=0 ; s<smax ; s++)
-				{
-					if (*stain < limit)
-					{
-						*stain += amount;
-						surf->stained=true;
-					}
-					else	//reset to 255.
-						*stain = 255;
-
-					stain++;
-				}				
-			}
-		}
-	}
-
-}
-
-
-
-// returns a texture number and the position inside it
-int SWAllocBlock (int w, int h, int *x, int *y)
-{
-	int		i, j;
-	int		best, best2;
-	int		texnum;
-
-	if (!w || !h)
-		Sys_Error ("AllocBlock: bad size");
-
-	for (texnum=0 ; texnum<MAX_LIGHTMAPS ; texnum++)
-	{
-		best = LMBLOCK_HEIGHT;
-
-		for (i=0 ; i<LMBLOCK_WIDTH-w ; i++)
-		{
-			best2 = 0;
-
-			for (j=0 ; j<w ; j++)
-			{
-				if (allocated[texnum][i+j] >= best)
-					break;
-				if (allocated[texnum][i+j] > best2)
-					best2 = allocated[texnum][i+j];
-			}
-			if (j == w)
-			{	// this is a valid spot
-				*x = i;
-				*y = best = best2;
-			}
-		}
-
-		if (best + h > LMBLOCK_HEIGHT)
-			continue;
-
-		for (i=0 ; i<w ; i++)
-			allocated[texnum][*x + i] = best + h;
-
-		return texnum;
-	}
-
-	Sys_Error ("AllocBlock: full");
-	return 0;
-}
-
-void R_CreateSurfaceLightmap (msurface_t *surf)
-{
-	int		smax, tmax;
-
-	if (surf->flags & (SURF_DRAWSKY|SURF_DRAWTURB))
-		return;
-	if (surf->texinfo->flags & (TEX_SPECIAL))
-		return;
-
-	smax = (surf->extents[0]>>4)+1;
-	tmax = (surf->extents[1]>>4)+1;
-
-	surf->lightmaptexturenum = SWAllocBlock (smax, tmax, &surf->light_s, &surf->light_t);
-}
-
-void R_BuildLightmaps(void)
-{
-	int i;
-	msurface_t	*surf;
-
-	memset(allocated, 0, sizeof(allocated));
-
-	R_WipeStains();
-
-	surf = cl.worldmodel->surfaces;
-	for (i=0 ; i<cl.worldmodel->numsurfaces ; i++, surf++)
-	{
-//		if ( cl.worldmodel->surfaces[i].flags & SURF_DRAWSKY )
-//			P_EmitSkyEffectTris(cl.worldmodel, &cl.worldmodel->surfaces[i]);
-		R_CreateSurfaceLightmap(surf);
-	}
-}
-//qbism ftestain end
-#endif
 
 /*
 ===============
@@ -400,7 +83,7 @@ void R_AddDynamicLights (void)
 		rad = cl_dlights[lnum].radius;
 		dist = DotProduct (cl_dlights[lnum].origin, surf->plane->normal) -
 				surf->plane->dist;
-		rad -= fabs(dist);
+		rad -= fabsf(dist);
 		minlight = cl_dlights[lnum].minlight;
 		if (rad < minlight)
 			continue;
@@ -465,9 +148,12 @@ Combine and scale multiple lightmaps into the 8.8 format in blocklights
 */
 void R_BuildLightMap (void)
 {
-	int		smax, tmax, t, i, size, maps;
+	int			smax, tmax;
+	int			t;
+	int			i, size;
 	byte		*lightmap;
 	unsigned	scale;
+	int			maps;
 	msurface_t	*surf;
 
 	surf = r_drawsurf.surf;
@@ -488,54 +174,21 @@ void R_BuildLightMap (void)
 	for (i=0 ; i<size ; i++)
 		blocklights[i] = r_refdef.ambientlight<<8;
 
+
 // add all the lightmaps
 	if (lightmap)
-	{
-		for (maps = 0 ; maps < MAXLIGHTMAPS && surf->styles[maps] != 255 ; maps++)
+		for (maps = 0 ; maps < MAXLIGHTMAPS && surf->styles[maps] != 255 ;
+			 maps++)
 		{
 			scale = r_drawsurf.lightadj[maps];	// 8.8 fraction		
 			for (i=0 ; i<size ; i++)
 				blocklights[i] += lightmap[i] * scale;
 			lightmap += size;	// skip to next lightmap
 		}
-	}
 
 // add all the dynamic lights
 	if (surf->dlightframe == r_framecount)
 		R_AddDynamicLights ();
- 
-#ifdef SUPPORTS_SOFTWARE_FTESTAIN
-//qbism ftestains begin
-	if (surf->stained)
-	{
-		stmap *stain;
-		int sstride;
-		int x, y;
-
-		stain = stainmaps + surf->lightmaptexturenum*LMBLOCK_WIDTH*LMBLOCK_HEIGHT;
-		stain += (surf->light_t * LMBLOCK_WIDTH + surf->light_s);
-
-		sstride = LMBLOCK_WIDTH - smax;
-
-		i=0;
-
-		for (x = 0; x < tmax; x++, stain+=sstride)
-		{
-			for (y = 0; y < smax; y++, i++, stain++)
-			{
-				t = (255*256*256-127*256-(int)blocklights[i]*(*stain)) >> (16 - VID_CBITS);
-
-				if (t < (1 << 6))
-					t = (1 << 6);
-
-				blocklights[i] = t;
-			}
-		}
-		return;
-	}
-//qbism ftestains end
-#endif
-
 
 // bound, invert, and shift
 	for (i=0 ; i<size ; i++)
@@ -559,7 +212,8 @@ Returns the proper texture for a given time and base texture
 */
 texture_t *R_TextureAnimation (texture_t *base)
 {
-	int	relative, count;
+	int		reletive;
+	int		count;
 
 	if (currententity->frame)
 	{
@@ -570,10 +224,10 @@ texture_t *R_TextureAnimation (texture_t *base)
 	if (!base->anim_total)
 		return base;
 
-	relative = (int)(cl.time*10) % base->anim_total;
+	reletive = (int)(cl.time*10) % base->anim_total;
 
 	count = 0;	
-	while (base->anim_min > relative || base->anim_max <= relative)
+	while (base->anim_min > reletive || base->anim_max <= reletive)
 	{
 		base = base->anim_next;
 		if (!base)
@@ -653,7 +307,8 @@ void R_DrawSurface (void)
 
 // << 16 components are to guarantee positive values for %
 	soffset = ((soffset >> r_drawsurf.surfmip) + (smax << 16)) % smax;
-	basetptr = &r_source[((((basetoffset >> r_drawsurf.surfmip) + (tmax << 16)) % tmax) * twidth)];
+	basetptr = &r_source[((((basetoffset >> r_drawsurf.surfmip) 
+		+ (tmax << 16)) % tmax) * twidth)];
 
 	pcolumndest = r_drawsurf.surfdat;
 
@@ -713,7 +368,8 @@ void R_DrawSurfaceBlock8_mip0 (void)
 			for (b=15; b>=0; b--)
 			{
 				pix = psource[b];
-				prowdest[b] = ((unsigned char *)vid.colormap)[(light & 0xFF00) + pix];
+				prowdest[b] = ((unsigned char *)vid.colormap)
+						[(light & 0xFF00) + pix];
 				light += lightstep;
 			}
 	
@@ -727,6 +383,7 @@ void R_DrawSurfaceBlock8_mip0 (void)
 			psource -= r_stepback;
 	}
 }
+
 
 /*
 ================
@@ -761,7 +418,8 @@ void R_DrawSurfaceBlock8_mip1 (void)
 			for (b=7; b>=0; b--)
 			{
 				pix = psource[b];
-				prowdest[b] = ((unsigned char *)vid.colormap)[(light & 0xFF00) + pix];
+				prowdest[b] = ((unsigned char *)vid.colormap)
+						[(light & 0xFF00) + pix];
 				light += lightstep;
 			}
 	
@@ -775,6 +433,7 @@ void R_DrawSurfaceBlock8_mip1 (void)
 			psource -= r_stepback;
 	}
 }
+
 
 /*
 ================
@@ -809,7 +468,8 @@ void R_DrawSurfaceBlock8_mip2 (void)
 			for (b=3; b>=0; b--)
 			{
 				pix = psource[b];
-				prowdest[b] = ((unsigned char *)vid.colormap)[(light & 0xFF00) + pix];
+				prowdest[b] = ((unsigned char *)vid.colormap)
+						[(light & 0xFF00) + pix];
 				light += lightstep;
 			}
 	
@@ -823,6 +483,7 @@ void R_DrawSurfaceBlock8_mip2 (void)
 			psource -= r_stepback;
 	}
 }
+
 
 /*
 ================
@@ -857,7 +518,8 @@ void R_DrawSurfaceBlock8_mip3 (void)
 			for (b=1; b>=0; b--)
 			{
 				pix = psource[b];
-				prowdest[b] = ((unsigned char *)vid.colormap)[(light & 0xFF00) + pix];
+				prowdest[b] = ((unsigned char *)vid.colormap)
+						[(light & 0xFF00) + pix];
 				light += lightstep;
 			}
 	

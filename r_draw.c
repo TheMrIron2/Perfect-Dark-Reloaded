@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -18,887 +18,888 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-// draw.c -- this is the only file outside the refresh that touches the
-// vid buffer
+// r_draw.c
 
 #include "quakedef.h"
+#include "r_local.h"
+#include "d_local.h"	// FIXME: shouldn't need to include this
 
-typedef struct {
-	vrect_t	rect;
-	int		width;
-	int		height;
-	byte	*ptexbytes;
-	int		rowbytes;
-} rectdesc_t;
+#define MAXLEFTCLIPEDGES		100
 
-static rectdesc_t	r_rectdesc;
+// !!! if these are changed, they must be changed in asm_draw.h too !!!
+#define FULLY_CLIPPED_CACHED	0x80000000
+#define FRAMECOUNT_MASK			0x7FFFFFFF
 
-byte		*draw_chars;				// 8*8 graphic characters
-qpic_t		*draw_disc;
-qpic_t		*draw_backtile;
+unsigned int	cacheoffset;
 
-extern	cvar_t	crosshair, cl_crosshaircentered, cl_crossx, cl_crossy; //, crosshaircolor, crosshairsize;
+int			c_faceclip;					// number of faces clipped
 
-//=============================================================================
-/* Support Routines */
+zpointdesc_t	r_zpointdesc;
+polydesc_t		r_polydesc;
 
-typedef struct cachepic_s
+clipplane_t	*entity_clipplanes;
+clipplane_t	view_clipplanes[4];
+clipplane_t	world_clipplanes[16];
+
+medge_t			*r_pedge;
+
+qboolean		r_leftclipped, r_rightclipped;
+static qboolean	makeleftedge, makerightedge;
+qboolean		r_nearzionly;
+
+int		sintable[SIN_BUFFER_SIZE];
+int		intsintable[SIN_BUFFER_SIZE];
+
+mvertex_t	r_leftenter, r_leftexit;
+mvertex_t	r_rightenter, r_rightexit;
+
+typedef struct
 {
-	char		name[MAX_QPATH];
-	cache_user_t	cache;
-} cachepic_t;
+	float	u,v;
+	int		ceilv;
+} evert_t;
 
-#define	MAX_CACHED_PICS		128
-cachepic_t	menu_cachepics[MAX_CACHED_PICS];
-int			menu_numcachepics;
+int				r_emitted;
+float			r_nearzi;
+float			r_u1, r_v1, r_lzi1;
+int				r_ceilv1;
+
+qboolean	r_lastvertvalid;
 
 
-qpic_t	*Draw_PicFromWad (char *name)
-{
-	return W_GetLumpName (name);
-}
+#if	!id386
 
 /*
 ================
-Draw_CachePic
+R_EmitEdge
 ================
 */
-qpic_t	*Draw_CachePic (char *path)
+void R_EmitEdge (mvertex_t *pv0, mvertex_t *pv1)
 {
-	cachepic_t	*pic;
-	int			i;
-	qpic_t		*dat;
+	edge_t	*edge, *pcheck;
+	int		u_check;
+	float	u, u_step;
+	vec3_t	local, transformed;
+	float	*world;
+	int		v, v2, ceilv0;
+	float	scale, lzi0, u0, v0;
+	int		side;
 
-	for (pic=menu_cachepics, i=0 ; i<menu_numcachepics ; pic++, i++)
-		if (!strcmp (path, pic->name))
-			break;
-
-	if (i == menu_numcachepics)
+	if (r_lastvertvalid)
 	{
-		if (menu_numcachepics == MAX_CACHED_PICS)
-			Sys_Error ("menu_numcachepics == MAX_CACHED_PICS");
-		menu_numcachepics++;
-		strcpy (pic->name, path);
+		u0 = r_u1;
+		v0 = r_v1;
+		lzi0 = r_lzi1;
+		ceilv0 = r_ceilv1;
+	}
+	else
+	{
+		world = &pv0->position[0];
+	
+	// transform and project
+		VectorSubtract (world, modelorg, local);
+		TransformVector (local, transformed);
+	
+		if (transformed[2] < NEAR_CLIP)
+			transformed[2] = NEAR_CLIP;
+	
+		lzi0 = 1.0 / transformed[2];
+	
+	// FIXME: build x/yscale into transform?
+		scale = xscale * lzi0;
+		u0 = (xcenter + scale*transformed[0]);
+		if (u0 < r_refdef.fvrectx_adj)
+			u0 = r_refdef.fvrectx_adj;
+		if (u0 > r_refdef.fvrectright_adj)
+			u0 = r_refdef.fvrectright_adj;
+	
+		scale = yscale * lzi0;
+		v0 = (ycenter - scale*transformed[1]);
+		if (v0 < r_refdef.fvrecty_adj)
+			v0 = r_refdef.fvrecty_adj;
+		if (v0 > r_refdef.fvrectbottom_adj)
+			v0 = r_refdef.fvrectbottom_adj;
+	
+		ceilv0 = (int) ceilf(v0);
 	}
 
-	if ((dat = Cache_Check (&pic->cache)))
-		return dat;
+	world = &pv1->position[0];
 
-// load the pic from disk
-	COM_LoadCacheFile (path, &pic->cache);
+// transform and project
+	VectorSubtract (world, modelorg, local);
+	TransformVector (local, transformed);
 
-	if (!(dat = (qpic_t *)pic->cache.data))
-		Sys_Error ("Draw_CachePic: failed to load %s", path);
+	if (transformed[2] < NEAR_CLIP)
+		transformed[2] = NEAR_CLIP;
 
-	SwapPic (dat);
+	r_lzi1 = 1.0 / transformed[2];
 
-	return dat;
+	scale = xscale * r_lzi1;
+	r_u1 = (xcenter + scale*transformed[0]);
+	if (r_u1 < r_refdef.fvrectx_adj)
+		r_u1 = r_refdef.fvrectx_adj;
+	if (r_u1 > r_refdef.fvrectright_adj)
+		r_u1 = r_refdef.fvrectright_adj;
+
+	scale = yscale * r_lzi1;
+	r_v1 = (ycenter - scale*transformed[1]);
+	if (r_v1 < r_refdef.fvrecty_adj)
+		r_v1 = r_refdef.fvrecty_adj;
+	if (r_v1 > r_refdef.fvrectbottom_adj)
+		r_v1 = r_refdef.fvrectbottom_adj;
+
+	if (r_lzi1 > lzi0)
+		lzi0 = r_lzi1;
+
+	if (lzi0 > r_nearzi)	// for mipmap finding
+		r_nearzi = lzi0;
+
+// for right edges, all we want is the effect on 1/z
+	if (r_nearzionly)
+		return;
+
+	r_emitted = 1;
+
+	r_ceilv1 = (int) ceilf(r_v1);
+
+
+// create the edge
+	if (ceilv0 == r_ceilv1)
+	{
+	// we cache unclipped horizontal edges as fully clipped
+		if (cacheoffset != 0x7FFFFFFF)
+		{
+			cacheoffset = FULLY_CLIPPED_CACHED |
+					(r_framecount & FRAMECOUNT_MASK);
+		}
+
+		return;		// horizontal edge
+	}
+
+	side = ceilv0 > r_ceilv1;
+
+	edge = edge_p++;
+
+	edge->owner = r_pedge;
+
+	edge->nearzi = lzi0;
+
+	if (side == 0)
+	{
+	// trailing edge (go from p1 to p2)
+		v = ceilv0;
+		v2 = r_ceilv1 - 1;
+
+		edge->surfs[0] = surface_p - surfaces;
+		edge->surfs[1] = 0;
+
+		u_step = ((r_u1 - u0) / (r_v1 - v0));
+		u = u0 + ((float)v - v0) * u_step;
+	}
+	else
+	{
+	// leading edge (go from p2 to p1)
+		v2 = ceilv0 - 1;
+		v = r_ceilv1;
+
+		edge->surfs[0] = 0;
+		edge->surfs[1] = surface_p - surfaces;
+
+		u_step = ((u0 - r_u1) / (v0 - r_v1));
+		u = r_u1 + ((float)v - r_v1) * u_step;
+	}
+
+	edge->u_step = u_step*0x100000;
+	edge->u = u*0x100000 + 0xFFFFF;
+
+// we need to do this to avoid stepping off the edges if a very nearly
+// horizontal edge is less than epsilon above a scan, and numeric error causes
+// it to incorrectly extend to the scan, and the extension of the line goes off
+// the edge of the screen
+// FIXME: is this actually needed?
+	if (edge->u < r_refdef.vrect_x_adj_shift20)
+		edge->u = r_refdef.vrect_x_adj_shift20;
+	if (edge->u > r_refdef.vrectright_adj_shift20)
+		edge->u = r_refdef.vrectright_adj_shift20;
+
+//
+// sort the edge in normally
+//
+	u_check = edge->u;
+	if (edge->surfs[0])
+		u_check++;	// sort trailers after leaders
+
+	if (!newedges[v] || newedges[v]->u >= u_check)
+	{
+		edge->next = newedges[v];
+		newedges[v] = edge;
+	}
+	else
+	{
+		pcheck = newedges[v];
+		while (pcheck->next && pcheck->next->u < u_check)
+			pcheck = pcheck->next;
+		edge->next = pcheck->next;
+		pcheck->next = edge;
+	}
+
+	edge->nextremove = removeedges[v2];
+	removeedges[v2] = edge;
 }
 
-/*
-===============
-Draw_Init
-===============
-*/
-void Draw_Init (void)
-{
-	draw_chars = W_GetLumpName ("conchars");
-	draw_disc = W_GetLumpName ("disc");
-	draw_backtile = W_GetLumpName ("backtile");
-
-	r_rectdesc.width = draw_backtile->width;
-	r_rectdesc.height = draw_backtile->height;
-	r_rectdesc.ptexbytes = draw_backtile->data;
-	r_rectdesc.rowbytes = draw_backtile->width;
-}
 
 /*
 ================
-Draw_Character
-
-Draws one 8*8 graphics character with 0 being transparent.
-It can be clipped to the top of the screen to allow the console to be
-smoothly scrolled off.
+R_ClipEdge
 ================
 */
-void Draw_Character (int x, int y, int num)
+void R_ClipEdge (mvertex_t *pv0, mvertex_t *pv1, clipplane_t *clip)
 {
-	byte			*dest;
-	byte			*source;
-	unsigned short	*pusdest;
-	int				drawline;
-	int				row, col;
+	float		d0, d1, f;
+	mvertex_t	clipvert;
 
-	num &= 255;
+	if (clip)
+	{
+		do
+		{
+			d0 = DotProduct (pv0->position, clip->normal) - clip->dist;
+			d1 = DotProduct (pv1->position, clip->normal) - clip->dist;
 
-	if (y <= -8)
-		return;			// totally off screen
+			if (d0 >= 0)
+			{
+			// point 0 is unclipped
+				if (d1 >= 0)
+				{
+				// both points are unclipped
+					continue;
+				}
 
-#if 1 // was #ifdef PARANOID -- Baker: 4.32 we need this for autoid 
-	if (y > vid.height - 8 || x < 0 || x > vid.width - 8) {
-		//Sys_Error  ("Con_DrawCharacter: (%i, %i)", x, y);
-		Con_DPrintf ("Con_DrawCharacter: (%i, %i)\n", x, y);
+			// only point 1 is clipped
+
+			// we don't cache clipped edges
+				cacheoffset = 0x7FFFFFFF;
+
+				f = d0 / (d0 - d1);
+				clipvert.position[0] = pv0->position[0] +
+						f * (pv1->position[0] - pv0->position[0]);
+				clipvert.position[1] = pv0->position[1] +
+						f * (pv1->position[1] - pv0->position[1]);
+				clipvert.position[2] = pv0->position[2] +
+						f * (pv1->position[2] - pv0->position[2]);
+
+				if (clip->leftedge)
+				{
+					r_leftclipped = true;
+					r_leftexit = clipvert;
+				}
+				else if (clip->rightedge)
+				{
+					r_rightclipped = true;
+					r_rightexit = clipvert;
+				}
+
+				R_ClipEdge (pv0, &clipvert, clip->next);
+				return;
+			}
+			else
+			{
+			// point 0 is clipped
+				if (d1 < 0)
+				{
+				// both points are clipped
+				// we do cache fully clipped edges
+					if (!r_leftclipped)
+						cacheoffset = FULLY_CLIPPED_CACHED |
+								(r_framecount & FRAMECOUNT_MASK);
+					return;
+				}
+
+			// only point 0 is clipped
+				r_lastvertvalid = false;
+
+			// we don't cache partially clipped edges
+				cacheoffset = 0x7FFFFFFF;
+
+				f = d0 / (d0 - d1);
+				clipvert.position[0] = pv0->position[0] +
+						f * (pv1->position[0] - pv0->position[0]);
+				clipvert.position[1] = pv0->position[1] +
+						f * (pv1->position[1] - pv0->position[1]);
+				clipvert.position[2] = pv0->position[2] +
+						f * (pv1->position[2] - pv0->position[2]);
+
+				if (clip->leftedge)
+				{
+					r_leftclipped = true;
+					r_leftenter = clipvert;
+				}
+				else if (clip->rightedge)
+				{
+					r_rightclipped = true;
+					r_rightenter = clipvert;
+				}
+
+				R_ClipEdge (&clipvert, pv1, clip->next);
+				return;
+			}
+		} while ((clip = clip->next) != NULL);
+	}
+
+// add the edge
+	R_EmitEdge (pv0, pv1);
+}
+
+#endif	// !id386
+
+
+/*
+================
+R_EmitCachedEdge
+================
+*/
+void R_EmitCachedEdge (void)
+{
+	edge_t		*pedge_t;
+
+	pedge_t = (edge_t *)((unsigned long)r_edges + r_pedge->cachededgeoffset);
+
+	if (!pedge_t->surfs[0])
+		pedge_t->surfs[0] = surface_p - surfaces;
+	else
+		pedge_t->surfs[1] = surface_p - surfaces;
+
+	if (pedge_t->nearzi > r_nearzi)	// for mipmap finding
+		r_nearzi = pedge_t->nearzi;
+
+	r_emitted = 1;
+}
+
+
+/*
+================
+R_RenderFace
+================
+*/
+void R_RenderFace (msurface_t *fa, int clipflags)
+{
+	int			i, lindex;
+	unsigned	mask;
+	mplane_t	*pplane;
+	float		distinv;
+	vec3_t		p_normal;
+	medge_t		*pedges, tedge;
+	clipplane_t	*pclip;
+
+// skip out if no more surfs
+	if ((surface_p) >= surf_max)
+	{
+		r_outofsurfaces++;
 		return;
 	}
-#endif
 
-#ifdef PARANOID // Baker: I would enable but I don't see how it could happen, haha!  Why isn't it num unsigned char anyways?
-		if (num < 0 || num > 255)
-			Sys_Error ("Con_DrawCharacter: char %i", num);
-#endif
-
-	row = num>>4;
-	col = num&15;
-	source = draw_chars + (row<<10) + (col<<3);
-
-	if (y < 0)
-	{	// clipped
-		drawline = 8 + y;
-		source -= 128*y;
-		y = 0;
-	}
-	else
+// ditto if not enough edges left, or switch to auxedges if possible
+	if ((edge_p + fa->numedges + 4) >= edge_max)
 	{
-		drawline = 8;
+		r_outofedges += fa->numedges;
+		return;
 	}
 
-	if (r_pixbytes == 1) {
-		dest = vid.conbuffer + y*vid.conrowbytes + x;
+	c_faceclip++;
 
-		while (drawline--)
-		{
-			if (source[0])
-				dest[0] = source[0];
-			if (source[1])
-				dest[1] = source[1];
-			if (source[2])
-				dest[2] = source[2];
-			if (source[3])
-				dest[3] = source[3];
-			if (source[4])
-				dest[4] = source[4];
-			if (source[5])
-				dest[5] = source[5];
-			if (source[6])
-				dest[6] = source[6];
-			if (source[7])
-				dest[7] = source[7];
-			source += 128;
-			dest += vid.conrowbytes;
-		}
-	} else {
-	// FIXME: pre-expand to native format?
-		pusdest = (unsigned short *)
-				((byte *)vid.conbuffer + y*vid.conrowbytes + (x<<1));
+// set up clip planes
+	pclip = NULL;
 
-		while (drawline--)
-		{
-			if (source[0])
-				pusdest[0] = d_8to16table[source[0]];
-			if (source[1])
-				pusdest[1] = d_8to16table[source[1]];
-			if (source[2])
-				pusdest[2] = d_8to16table[source[2]];
-			if (source[3])
-				pusdest[3] = d_8to16table[source[3]];
-			if (source[4])
-				pusdest[4] = d_8to16table[source[4]];
-			if (source[5])
-				pusdest[5] = d_8to16table[source[5]];
-			if (source[6])
-				pusdest[6] = d_8to16table[source[6]];
-			if (source[7])
-				pusdest[7] = d_8to16table[source[7]];
-
-			source += 128;
-			pusdest += (vid.conrowbytes >> 1);
-		}
-	}
-}
-
-/*
-================
-Draw_String
-================
-*/
-void Draw_String (int x, int y, char *str)
-{
-	while (*str)
+	for (i=3, mask = 0x08 ; i>=0 ; i--, mask >>= 1)
 	{
-		Draw_Character (x, y, *str);
-		str++;
-		x += 8;
-	}
-}
-
-void Draw_Crosshair (void)
-{
-
-	if (crosshair.value)
-	{
-			if (!cl_crosshaircentered.value) {
-				Draw_Character (scr_vrect.x + scr_vrect.width/2 + cl_crossx.value, scr_vrect.y + scr_vrect.height/2 + cl_crossy.value, '+'); // Standard off-center Quake crosshair
-			} else {
-				Draw_Character (scr_vrect.x + scr_vrect.width / 2 - 4 + cl_crossx.value, scr_vrect.y + scr_vrect.height / 2 - 4 + cl_crossy.value, '+'); // Baker 3.60 - Centered crosshair (FuhQuake)
-			}
-
-	}
-
-
-}
-
-/*
-================
-Draw_DebugChar
-
-Draws a single character directly to the upper right corner of the screen.
-This is for debugging lockups by drawing different chars in different parts
-of the code.
-================
-*/
-void Draw_DebugChar (char num)
-{
-	byte			*dest;
-	byte			*source;
-	int				drawline;
-	int				row, col;
-	extern byte		*draw_chars;
-
-	if (!vid.direct)
-		return;		// don't have direct FB access, so no debugchars...
-
-	drawline = 8;
-
-	row = num>>4;
-	col = num&15;
-	source = draw_chars + (row<<10) + (col<<3);
-
-	dest = vid.direct + 312;
-
-	while (drawline--)
-	{
-		dest[0] = source[0];
-		dest[1] = source[1];
-		dest[2] = source[2];
-		dest[3] = source[3];
-		dest[4] = source[4];
-		dest[5] = source[5];
-		dest[6] = source[6];
-		dest[7] = source[7];
-		source += 128;
-		dest += 320;
-	}
-}
-
-/*
-=============
-Draw_Pic
-=============
-*/
-void Draw_Pic (int x, int y, qpic_t *pic)
-{
-	byte			*dest, *source;
-	unsigned short	*pusdest;
-	int				v, u;
-
-	if (x < 0 || x + pic->width > vid.width || y < 0 || y + pic->height > vid.height)
-		Sys_Error ("Draw_Pic: bad coordinates");
-
-	source = pic->data;
-
-	if (r_pixbytes == 1) {
-		dest = vid.buffer + y * vid.rowbytes + x;
-
-		for (v=0 ; v<pic->height ; v++)
+		if (clipflags & mask)
 		{
-			memcpy (dest, source, pic->width);
-			dest += vid.rowbytes;
-			source += pic->width;
-		}
-	} else {
-	// FIXME: pretranslate at load time?
-		pusdest = (unsigned short *)vid.buffer + y * (vid.rowbytes >> 1) + x;
-
-		for (v=0 ; v<pic->height ; v++) {
-			for (u=0 ; u<pic->width ; u++) {
-				pusdest[u] = d_8to16table[source[u]];
-			}
-
-			pusdest += vid.rowbytes >> 1;
-			source += pic->width;
+			view_clipplanes[i].next = pclip;
+			pclip = &view_clipplanes[i];
 		}
 	}
-}
 
+// push the edges through
+	r_emitted = 0;
+	r_nearzi = 0;
+	r_nearzionly = false;
+	makeleftedge = makerightedge = false;
+	pedges = currententity->model->edges;
+	r_lastvertvalid = false;
 
-/*
-=============
-Draw_SubPic
-=============
-*/
-void Draw_SubPic(int x, int y, qpic_t *pic, int srcx, int srcy, int width, int height)
-{
-	byte			*dest, *source;
-	unsigned short	*pusdest;
-	int				v, u;
+	for (i=0 ; i<fa->numedges ; i++)
+	{
+		lindex = currententity->model->surfedges[fa->firstedge + i];
 
-	if (x < 0 || x + width > vid.width || y < 0 || y + height > vid.height)
-		Sys_Error ("Draw_Pic: bad coordinates");
-
-	source = pic->data + srcy * pic->width + srcx;
-
-	if (r_pixbytes == 1) {
-		dest = vid.buffer + y * vid.rowbytes + x;
-
-		for (v=0 ; v<height ; v++)
+		if (lindex > 0)
 		{
-			memcpy (dest, source, width);
-			dest += vid.rowbytes;
-			source += pic->width;
-		}
-	} else {
-	// FIXME: pretranslate at load time?
-		pusdest = (unsigned short *)vid.buffer + y * (vid.rowbytes >> 1) + x;
+			r_pedge = &pedges[lindex];
 
-		for (v=0 ; v<height ; v++) {
-			for (u=srcx ; u<(srcx+width) ; u++) {
-				pusdest[u] = d_8to16table[source[u]];
-			}
-
-			pusdest += vid.rowbytes >> 1;
-			source += pic->width;
-		}
-	}
-}
-
-
-/*
-=============
-Draw_TransPic
-=============
-*/
-void Draw_TransPic (int x, int y, qpic_t *pic)
-{
-	byte	*dest, *source, tbyte;
-	unsigned short	*pusdest;
-	int				v, u;
-
-	if (x < 0 || (unsigned)(x + pic->width) > vid.width || y < 0 || (unsigned)(y + pic->height) > vid.height)
-		Sys_Error ("Draw_TransPic: bad coordinates");
-
-	source = pic->data;
-
-	if (r_pixbytes == 1) {
-		dest = vid.buffer + y * vid.rowbytes + x;
-
-		if (pic->width & 7)
-		{	// general
-			for (v=0 ; v<pic->height ; v++)
+		// if the edge is cached, we can just reuse the edge
+			if (!insubmodel)
 			{
-				for (u=0 ; u<pic->width ; u++)
-					if ( (tbyte=source[u]) != TRANSPARENT_COLOR)
-						dest[u] = tbyte;
-
-				dest += vid.rowbytes;
-				source += pic->width;
+				if (r_pedge->cachededgeoffset & FULLY_CLIPPED_CACHED)
+				{
+					if ((r_pedge->cachededgeoffset & FRAMECOUNT_MASK) ==
+						r_framecount)
+					{
+						r_lastvertvalid = false;
+						continue;
+					}
+				}
+				else
+				{
+					if ((((unsigned long)edge_p - (unsigned long)r_edges) >
+						 r_pedge->cachededgeoffset) &&
+						(((edge_t *)((unsigned long)r_edges +
+						 r_pedge->cachededgeoffset))->owner == r_pedge))
+					{
+						R_EmitCachedEdge ();
+						r_lastvertvalid = false;
+						continue;
+					}
+				}
 			}
+
+		// assume it's cacheable
+			cacheoffset = (byte *)edge_p - (byte *)r_edges;
+			r_leftclipped = r_rightclipped = false;
+			R_ClipEdge (&r_pcurrentvertbase[r_pedge->v[0]],
+						&r_pcurrentvertbase[r_pedge->v[1]],
+						pclip);
+			r_pedge->cachededgeoffset = cacheoffset;
+
+			if (r_leftclipped)
+				makeleftedge = true;
+			if (r_rightclipped)
+				makerightedge = true;
+			r_lastvertvalid = true;
 		}
 		else
-		{	// unwound
-			for (v=0 ; v<pic->height ; v++)
+		{
+			lindex = -lindex;
+			r_pedge = &pedges[lindex];
+		// if the edge is cached, we can just reuse the edge
+			if (!insubmodel)
 			{
-				for (u=0 ; u<pic->width ; u+=8)
+				if (r_pedge->cachededgeoffset & FULLY_CLIPPED_CACHED)
 				{
-					if ( (tbyte=source[u]) != TRANSPARENT_COLOR)
-						dest[u] = tbyte;
-					if ( (tbyte=source[u+1]) != TRANSPARENT_COLOR)
-						dest[u+1] = tbyte;
-					if ( (tbyte=source[u+2]) != TRANSPARENT_COLOR)
-						dest[u+2] = tbyte;
-					if ( (tbyte=source[u+3]) != TRANSPARENT_COLOR)
-						dest[u+3] = tbyte;
-					if ( (tbyte=source[u+4]) != TRANSPARENT_COLOR)
-						dest[u+4] = tbyte;
-					if ( (tbyte=source[u+5]) != TRANSPARENT_COLOR)
-						dest[u+5] = tbyte;
-					if ( (tbyte=source[u+6]) != TRANSPARENT_COLOR)
-						dest[u+6] = tbyte;
-					if ( (tbyte=source[u+7]) != TRANSPARENT_COLOR)
-						dest[u+7] = tbyte;
+					if ((r_pedge->cachededgeoffset & FRAMECOUNT_MASK) ==
+						r_framecount)
+					{
+						r_lastvertvalid = false;
+						continue;
+					}
 				}
-				dest += vid.rowbytes;
-				source += pic->width;
-			}
-		}
-	} else {
-	// FIXME: pretranslate at load time?
-		pusdest = (unsigned short *)vid.buffer + y * (vid.rowbytes >> 1) + x;
-
-		for (v=0 ; v<pic->height ; v++) {
-			for (u=0 ; u<pic->width ; u++) {
-				tbyte = source[u];
-
-				if (tbyte != TRANSPARENT_COLOR) {
-					pusdest[u] = d_8to16table[tbyte];
+				else
+				{
+				// it's cached if the cached edge is valid and is owned
+				// by this medge_t
+					if ((((unsigned long)edge_p - (unsigned long)r_edges) >
+						 r_pedge->cachededgeoffset) &&
+						(((edge_t *)((unsigned long)r_edges +
+						 r_pedge->cachededgeoffset))->owner == r_pedge))
+					{
+						R_EmitCachedEdge ();
+						r_lastvertvalid = false;
+						continue;
+					}
 				}
 			}
 
-			pusdest += vid.rowbytes >> 1;
-			source += pic->width;
+		// assume it's cacheable
+			cacheoffset = (byte *)edge_p - (byte *)r_edges;
+			r_leftclipped = r_rightclipped = false;
+			R_ClipEdge (&r_pcurrentvertbase[r_pedge->v[1]],
+						&r_pcurrentvertbase[r_pedge->v[0]],
+						pclip);
+			r_pedge->cachededgeoffset = cacheoffset;
+
+			if (r_leftclipped)
+				makeleftedge = true;
+			if (r_rightclipped)
+				makerightedge = true;
+			r_lastvertvalid = true;
 		}
 	}
+
+// if there was a clip off the left edge, add that edge too
+// FIXME: faster to do in screen space?
+// FIXME: share clipped edges?
+	if (makeleftedge)
+	{
+		r_pedge = &tedge;
+		r_lastvertvalid = false;
+		R_ClipEdge (&r_leftexit, &r_leftenter, pclip->next);
+	}
+
+// if there was a clip off the right edge, get the right r_nearzi
+	if (makerightedge)
+	{
+		r_pedge = &tedge;
+		r_lastvertvalid = false;
+		r_nearzionly = true;
+		R_ClipEdge (&r_rightexit, &r_rightenter, view_clipplanes[1].next);
+	}
+
+// if no edges made it out, return without posting the surface
+	if (!r_emitted)
+		return;
+
+	r_polycount++;
+
+	surface_p->data = (void *)fa;
+	surface_p->nearzi = r_nearzi;
+	surface_p->flags = fa->flags;
+	surface_p->insubmodel = insubmodel;
+	surface_p->spanstate = 0;
+	surface_p->entity = currententity;
+	surface_p->key = r_currentkey++;
+	surface_p->spans = NULL;
+
+	pplane = fa->plane;
+// FIXME: cache this?
+	TransformVector (pplane->normal, p_normal);
+// FIXME: cache this?
+	distinv = 1.0 / (pplane->dist - DotProduct (modelorg, pplane->normal));
+
+	surface_p->d_zistepu = p_normal[0] * xscaleinv * distinv;
+	surface_p->d_zistepv = -p_normal[1] * yscaleinv * distinv;
+	surface_p->d_ziorigin = p_normal[2] * distinv -
+			xcenter * surface_p->d_zistepu -
+			ycenter * surface_p->d_zistepv;
+
+//JDC	VectorCopy (r_worldmodelorg, surface_p->modelorg);
+	surface_p++;
 }
 
 
 /*
-=============
-Draw_TransPicTranslate
-=============
+================
+R_RenderBmodelFace
+================
 */
-void Draw_TransPicTranslate (int x, int y, qpic_t *pic, byte *translation)
+void R_RenderBmodelFace (bedge_t *pedges, msurface_t *psurf)
 {
-	byte	*dest, *source, tbyte;
-	unsigned short	*pusdest;
-	int				v, u;
+	int			i;
+	unsigned	mask;
+	mplane_t	*pplane;
+	float		distinv;
+	vec3_t		p_normal;
+	medge_t		tedge;
+	clipplane_t	*pclip;
 
-	if (x < 0 || (unsigned)(x + pic->width) > vid.width || y < 0 || (unsigned)(y + pic->height) > vid.height)
-		Sys_Error ("Draw_TransPic: bad coordinates");
+// skip out if no more surfs
+	if (surface_p >= surf_max)
+	{
+		r_outofsurfaces++;
+		return;
+	}
 
-	source = pic->data;
+// ditto if not enough edges left, or switch to auxedges if possible
+	if ((edge_p + psurf->numedges + 4) >= edge_max)
+	{
+		r_outofedges += psurf->numedges;
+		return;
+	}
 
-	if (r_pixbytes == 1) {
-		dest = vid.buffer + y * vid.rowbytes + x;
+	c_faceclip++;
 
-		if (pic->width & 7)
-		{	// general
-			for (v=0 ; v<pic->height ; v++)
-			{
-				for (u=0 ; u<pic->width ; u++)
-					if ( (tbyte=source[u]) != TRANSPARENT_COLOR)
-						dest[u] = translation[tbyte];
+// this is a dummy to give the caching mechanism someplace to write to
+	r_pedge = &tedge;
 
-				dest += vid.rowbytes;
-				source += pic->width;
-			}
+// set up clip planes
+	pclip = NULL;
+
+	for (i=3, mask = 0x08 ; i>=0 ; i--, mask >>= 1)
+	{
+		if (r_clipflags & mask)
+		{
+			view_clipplanes[i].next = pclip;
+			pclip = &view_clipplanes[i];
+		}
+	}
+
+// push the edges through
+	r_emitted = 0;
+	r_nearzi = 0;
+	r_nearzionly = false;
+	makeleftedge = makerightedge = false;
+// FIXME: keep clipped bmodel edges in clockwise order so last vertex caching
+// can be used?
+	r_lastvertvalid = false;
+
+	for ( ; pedges ; pedges = pedges->pnext)
+	{
+		r_leftclipped = r_rightclipped = false;
+		R_ClipEdge (pedges->v[0], pedges->v[1], pclip);
+
+		if (r_leftclipped)
+			makeleftedge = true;
+		if (r_rightclipped)
+			makerightedge = true;
+	}
+
+// if there was a clip off the left edge, add that edge too
+// FIXME: faster to do in screen space?
+// FIXME: share clipped edges?
+	if (makeleftedge)
+	{
+		r_pedge = &tedge;
+		R_ClipEdge (&r_leftexit, &r_leftenter, pclip->next);
+	}
+
+// if there was a clip off the right edge, get the right r_nearzi
+	if (makerightedge)
+	{
+		r_pedge = &tedge;
+		r_nearzionly = true;
+		R_ClipEdge (&r_rightexit, &r_rightenter, view_clipplanes[1].next);
+	}
+
+// if no edges made it out, return without posting the surface
+	if (!r_emitted)
+		return;
+
+	r_polycount++;
+
+	surface_p->data = (void *)psurf;
+	surface_p->nearzi = r_nearzi;
+	surface_p->flags = psurf->flags;
+	surface_p->insubmodel = true;
+	surface_p->spanstate = 0;
+	surface_p->entity = currententity;
+	surface_p->key = r_currentbkey;
+	surface_p->spans = NULL;
+
+	pplane = psurf->plane;
+// FIXME: cache this?
+	TransformVector (pplane->normal, p_normal);
+// FIXME: cache this?
+	distinv = 1.0 / (pplane->dist - DotProduct (modelorg, pplane->normal));
+
+	surface_p->d_zistepu = p_normal[0] * xscaleinv * distinv;
+	surface_p->d_zistepv = -p_normal[1] * yscaleinv * distinv;
+	surface_p->d_ziorigin = p_normal[2] * distinv -
+			xcenter * surface_p->d_zistepu -
+			ycenter * surface_p->d_zistepv;
+
+//JDC	VectorCopy (r_worldmodelorg, surface_p->modelorg);
+	surface_p++;
+}
+
+
+/*
+================
+R_RenderPoly
+================
+*/
+void R_RenderPoly (msurface_t *fa, int clipflags)
+{
+	int			i, lindex, lnumverts, s_axis, t_axis;
+	float		dist, lastdist, lzi, scale, u, v, frac;
+	unsigned	mask;
+	vec3_t		local, transformed;
+	clipplane_t	*pclip;
+	medge_t		*pedges;
+	mplane_t	*pplane;
+	mvertex_t	verts[2][100];	//FIXME: do real number
+	polyvert_t	pverts[100];	//FIXME: do real number, safely
+	int			vertpage, newverts, newpage, lastvert;
+	qboolean	visible;
+
+// FIXME: clean this up and make it faster
+// FIXME: guard against running out of vertices
+
+	s_axis = t_axis = 0;	// keep compiler happy
+
+// set up clip planes
+	pclip = NULL;
+
+	for (i=3, mask = 0x08 ; i>=0 ; i--, mask >>= 1)
+	{
+		if (clipflags & mask)
+		{
+			view_clipplanes[i].next = pclip;
+			pclip = &view_clipplanes[i];
+		}
+	}
+
+// reconstruct the polygon
+// FIXME: these should be precalculated and loaded off disk
+	pedges = currententity->model->edges;
+	lnumverts = fa->numedges;
+	vertpage = 0;
+
+	for (i=0 ; i<lnumverts ; i++)
+	{
+		lindex = currententity->model->surfedges[fa->firstedge + i];
+
+		if (lindex > 0)
+		{
+			r_pedge = &pedges[lindex];
+			verts[0][i] = r_pcurrentvertbase[r_pedge->v[0]];
 		}
 		else
-		{	// unwound
-			for (v=0 ; v<pic->height ; v++)
+		{
+			r_pedge = &pedges[-lindex];
+			verts[0][i] = r_pcurrentvertbase[r_pedge->v[1]];
+		}
+	}
+
+// clip the polygon, done if not visible
+	while (pclip)
+	{
+		lastvert = lnumverts - 1;
+		lastdist = DotProduct (verts[vertpage][lastvert].position,
+							   pclip->normal) - pclip->dist;
+
+		visible = false;
+		newverts = 0;
+		newpage = vertpage ^ 1;
+
+		for (i=0 ; i<lnumverts ; i++)
+		{
+			dist = DotProduct (verts[vertpage][i].position, pclip->normal) -
+					pclip->dist;
+
+			if ((lastdist > 0) != (dist > 0))
 			{
-				for (u=0 ; u<pic->width ; u+=8)
-				{
-					if ( (tbyte=source[u]) != TRANSPARENT_COLOR)
-						dest[u] = translation[tbyte];
-					if ( (tbyte=source[u+1]) != TRANSPARENT_COLOR)
-						dest[u+1] = translation[tbyte];
-					if ( (tbyte=source[u+2]) != TRANSPARENT_COLOR)
-						dest[u+2] = translation[tbyte];
-					if ( (tbyte=source[u+3]) != TRANSPARENT_COLOR)
-						dest[u+3] = translation[tbyte];
-					if ( (tbyte=source[u+4]) != TRANSPARENT_COLOR)
-						dest[u+4] = translation[tbyte];
-					if ( (tbyte=source[u+5]) != TRANSPARENT_COLOR)
-						dest[u+5] = translation[tbyte];
-					if ( (tbyte=source[u+6]) != TRANSPARENT_COLOR)
-						dest[u+6] = translation[tbyte];
-					if ( (tbyte=source[u+7]) != TRANSPARENT_COLOR)
-						dest[u+7] = translation[tbyte];
-				}
-				dest += vid.rowbytes;
-				source += pic->width;
-			}
-		}
-	} else {
-	// FIXME: pretranslate at load time?
-		pusdest = (unsigned short *)vid.buffer + y * (vid.rowbytes >> 1) + x;
-
-		for (v=0 ; v<pic->height ; v++) {
-			for (u=0 ; u<pic->width ; u++) {
-				tbyte = source[u];
-
-				if (tbyte != TRANSPARENT_COLOR) {
-					pusdest[u] = d_8to16table[tbyte];
-				}
+				frac = dist / (dist - lastdist);
+				verts[newpage][newverts].position[0] =
+						verts[vertpage][i].position[0] +
+						((verts[vertpage][lastvert].position[0] -
+						  verts[vertpage][i].position[0]) * frac);
+				verts[newpage][newverts].position[1] =
+						verts[vertpage][i].position[1] +
+						((verts[vertpage][lastvert].position[1] -
+						  verts[vertpage][i].position[1]) * frac);
+				verts[newpage][newverts].position[2] =
+						verts[vertpage][i].position[2] +
+						((verts[vertpage][lastvert].position[2] -
+						  verts[vertpage][i].position[2]) * frac);
+				newverts++;
 			}
 
-			pusdest += vid.rowbytes >> 1;
-			source += pic->width;
-		}
-	}
-}
-
-
-void Draw_CharToConback (int num, byte *dest)
-{
-	int		row, col;
-	byte	*source;
-	int		drawline;
-	int		x;
-
-	row = num>>4;
-	col = num&15;
-	source = draw_chars + (row<<10) + (col<<3);
-
-	drawline = 8;
-
-	while (drawline--)
-	{
-		for (x=0 ; x<8 ; x++)
-			if (source[x])
-				dest[x] = 0x60 + source[x];
-		source += 128;
-		dest += 320;
-	}
-}
-
-/*
-================
-Draw_ConsoleBackground
-================
-*/
-void Draw_ConsoleBackground (int lines)
-{
-	int				x, y, v;
-	byte			*src, *dest;
-	unsigned short	*pusdest;
-	int				f, fstep;
-	qpic_t			*conback;
-	char			ver[100];
-
-	conback = Draw_CachePic ("gfx/conback.lmp");
-
-// hack the version number directly into the pic
-
-	snprintf (ver, sizeof(ver), "(ProQuake) %4.2f", (float) PROQUAKE_SERIES_VERSION); // JPG - obvious change
-	dest = conback->data + 320*186 + 320 - 11 - 8*strlen(ver);
-
-	for (x=0 ; x<strlen(ver) ; x++)
-		Draw_CharToConback (ver[x], dest+(x<<3));
-
-// draw the pic
-	if (r_pixbytes == 1) {
-		dest = vid.conbuffer;
-
-		for (y=0 ; y<lines ; y++, dest += vid.conrowbytes)
-		{
-			v = (vid.conheight - lines + y)*200/vid.conheight;
-			src = conback->data + v*320;
-			if (vid.conwidth == 320)
-				memcpy (dest, src, vid.conwidth);
-			else
+			if (dist >= 0)
 			{
-				f = 0;
-				fstep = 320*0x10000/vid.conwidth;
-				for (x=0 ; x<vid.conwidth ; x+=4)
-				{
-					dest[x] = src[f>>16];
-					f += fstep;
-					dest[x+1] = src[f>>16];
-					f += fstep;
-					dest[x+2] = src[f>>16];
-					f += fstep;
-					dest[x+3] = src[f>>16];
-					f += fstep;
-				}
-			}
-		}
-	} else {
-		pusdest = (unsigned short *)vid.conbuffer;
-
-		for (y=0 ; y<lines ; y++, pusdest += (vid.conrowbytes >> 1))
-		{
-		// FIXME: pre-expand to native format?
-		// FIXME: does the endian switching go away in production?
-			v = (vid.conheight - lines + y)*200/vid.conheight;
-			src = conback->data + v*320;
-			f = 0;
-			fstep = 320*0x10000/vid.conwidth;
-			for (x=0 ; x<vid.conwidth ; x+=4) {
-				pusdest[x] = d_8to16table[src[f>>16]];
-				f += fstep;
-				pusdest[x+1] = d_8to16table[src[f>>16]];
-				f += fstep;
-				pusdest[x+2] = d_8to16table[src[f>>16]];
-				f += fstep;
-				pusdest[x+3] = d_8to16table[src[f>>16]];
-				f += fstep;
-			}
-		}
-	}
-}
-
-/*
-==============
-R_DrawRect8
-==============
-*/
-void R_DrawRect8 (vrect_t *prect, int rowbytes, byte *psrc, int transparent) {
-	byte	t;
-	int		i, j, srcdelta, destdelta;
-	byte	*pdest;
-
-	pdest = vid.buffer + (prect->y * vid.rowbytes) + prect->x;
-
-	srcdelta = rowbytes - prect->width;
-	destdelta = vid.rowbytes - prect->width;
-
-	if (transparent)
-	{
-		for (i=0 ; i<prect->height ; i++)
-		{
-			for (j=0 ; j<prect->width ; j++)
-			{
-				t = *psrc;
-				if (t != TRANSPARENT_COLOR)
-				{
-					*pdest = t;
-				}
-
-				psrc++;
-				pdest++;
+				verts[newpage][newverts] = verts[vertpage][i];
+				newverts++;
+				visible = true;
 			}
 
-			psrc += srcdelta;
-			pdest += destdelta;
+			lastvert = i;
+			lastdist = dist;
 		}
+
+		if (!visible || (newverts < 3))
+			return;
+
+		lnumverts = newverts;
+		vertpage ^= 1;
+		pclip = pclip->next;
 	}
-	else
+
+// transform and project, remembering the z values at the vertices and
+// r_nearzi, and extract the s and t coordinates at the vertices
+	pplane = fa->plane;
+	switch (pplane->type)
 	{
-		for (i=0 ; i<prect->height ; i++)
-		{
-			memcpy (pdest, psrc, prect->width);
-			psrc += rowbytes;
-			pdest += vid.rowbytes;
-		}
+	case PLANE_X:
+	case PLANE_ANYX:
+		s_axis = 1;
+		t_axis = 2;
+		break;
+	case PLANE_Y:
+	case PLANE_ANYY:
+		s_axis = 0;
+		t_axis = 2;
+		break;
+	case PLANE_Z:
+	case PLANE_ANYZ:
+		s_axis = 0;
+		t_axis = 1;
+		break;
 	}
-}
 
+	r_nearzi = 0;
 
-/*
-==============
-R_DrawRect16
-==============
-*/
-void R_DrawRect16 (vrect_t *prect, int rowbytes, byte *psrc,
-	int transparent)
-{
-	byte			t;
-	int				i, j, srcdelta, destdelta;
-	unsigned short	*pdest;
-
-// FIXME: would it be better to pre-expand native-format versions?
-
-	pdest = (unsigned short *)vid.buffer +
-			(prect->y * (vid.rowbytes >> 1)) + prect->x;
-
-	srcdelta = rowbytes - prect->width;
-	destdelta = (vid.rowbytes >> 1) - prect->width;
-
-	if (transparent)
+	for (i=0 ; i<lnumverts ; i++)
 	{
-		for (i=0 ; i<prect->height ; i++)
-		{
-			for (j=0 ; j<prect->width ; j++)
-			{
-				t = *psrc;
-				if (t != TRANSPARENT_COLOR)
-				{
-					*pdest = d_8to16table[t];
-				}
+	// transform and project
+		VectorSubtract (verts[vertpage][i].position, modelorg, local);
+		TransformVector (local, transformed);
 
-				psrc++;
-				pdest++;
-			}
+		if (transformed[2] < NEAR_CLIP)
+			transformed[2] = NEAR_CLIP;
 
-			psrc += srcdelta;
-			pdest += destdelta;
-		}
-	}
-	else
-	{
-		for (i=0 ; i<prect->height ; i++)
-		{
-			for (j=0 ; j<prect->width ; j++)
-			{
-				*pdest = d_8to16table[*psrc];
-				psrc++;
-				pdest++;
-			}
+		lzi = 1.0 / transformed[2];
 
-			psrc += srcdelta;
-			pdest += destdelta;
-		}
-	}
-}
+		if (lzi > r_nearzi)	// for mipmap finding
+			r_nearzi = lzi;
 
+	// FIXME: build x/yscale into transform?
+		scale = xscale * lzi;
+		u = (xcenter + scale*transformed[0]);
+		if (u < r_refdef.fvrectx_adj)
+			u = r_refdef.fvrectx_adj;
+		if (u > r_refdef.fvrectright_adj)
+			u = r_refdef.fvrectright_adj;
 
-/*
-=============
-Draw_TileClear
+		scale = yscale * lzi;
+		v = (ycenter - scale*transformed[1]);
+		if (v < r_refdef.fvrecty_adj)
+			v = r_refdef.fvrecty_adj;
+		if (v > r_refdef.fvrectbottom_adj)
+			v = r_refdef.fvrectbottom_adj;
 
-This repeats a 64*64 tile graphic to fill the screen around a sized down
-refresh window.
-=============
-*/
-void Draw_TileClear (int x, int y, int w, int h)
-{
-	int				width, height, tileoffsetx, tileoffsety;
-	byte			*psrc;
-	vrect_t			vr;
-
-	r_rectdesc.rect.x = x;
-	r_rectdesc.rect.y = y;
-	r_rectdesc.rect.width = w;
-	r_rectdesc.rect.height = h;
-
-	vr.y = r_rectdesc.rect.y;
-	height = r_rectdesc.rect.height;
-
-	tileoffsety = vr.y % r_rectdesc.height;
-
-	while (height > 0)
-	{
-		vr.x = r_rectdesc.rect.x;
-		width = r_rectdesc.rect.width;
-
-		if (tileoffsety != 0)
-			vr.height = r_rectdesc.height - tileoffsety;
-		else
-			vr.height = r_rectdesc.height;
-
-		if (vr.height > height)
-			vr.height = height;
-
-		tileoffsetx = vr.x % r_rectdesc.width;
-
-		while (width > 0)
-		{
-			if (tileoffsetx != 0)
-				vr.width = r_rectdesc.width - tileoffsetx;
-			else
-				vr.width = r_rectdesc.width;
-
-			if (vr.width > width)
-				vr.width = width;
-
-			psrc = r_rectdesc.ptexbytes + (tileoffsety * r_rectdesc.rowbytes) + tileoffsetx;
-
-			if (r_pixbytes == 1) {
-				R_DrawRect8 (&vr, r_rectdesc.rowbytes, psrc, 0);
-			} else {
-				R_DrawRect16 (&vr, r_rectdesc.rowbytes, psrc, 0);
-			}
-
-			vr.x += vr.width;
-			width -= vr.width;
-			tileoffsetx = 0;	// only the left tile can be left-clipped
-		}
-
-		vr.y += vr.height;
-		height -= vr.height;
-		tileoffsety = 0;		// only the top tile can be top-clipped
-	}
-}
-
-/*
-=============
-Draw_Fill
-
-Fills a box of pixels with a single color
-=============
-*/
-void Draw_Fill (int x, int y, int w, int h, int c)
-{
-	byte			*dest;
-	unsigned short	*pusdest;
-	unsigned		uc;
-	int				u, v;
-
-	if (r_pixbytes == 1) {
-		dest = vid.buffer + y*vid.rowbytes + x;
-		for (v=0 ; v<h ; v++, dest += vid.rowbytes)
-			for (u=0 ; u<w ; u++)
-				dest[u] = c;
-	} else {
-		uc = d_8to16table[c];
-
-		pusdest = (unsigned short *)vid.buffer + y * (vid.rowbytes >> 1) + x;
-		for (v=0 ; v<h ; v++, pusdest += (vid.rowbytes >> 1))
-			for (u=0 ; u<w ; u++)
-				pusdest[u] = uc;
-	}
-}
-
-//=============================================================================
-
-/*
-================
-Draw_FadeScreen
-================
-*/
-void Draw_FadeScreen (void)
-{
-	int			x,y;
-	byte		*pbuf;
-
-	VID_UnlockBuffer ();
-	S_ExtraUpdate ();
-	VID_LockBuffer ();
-
-	for (y=0 ; y<vid.height ; y++)
-	{
-		int	t;
-
-		pbuf = (byte *)(vid.buffer + vid.rowbytes*y);
-		t = (y & 1) << 1;
-
-		for (x=0 ; x<vid.width ; x++)
-		{
-			if ((x & 3) != t)
-				pbuf[x] = 0;
-		}
+		pverts[i].u = u;
+		pverts[i].v = v;
+		pverts[i].zi = lzi;
+		pverts[i].s = verts[vertpage][i].position[s_axis];
+		pverts[i].t = verts[vertpage][i].position[t_axis];
 	}
 
-	VID_UnlockBuffer ();
-	S_ExtraUpdate ();
-	VID_LockBuffer ();
-}
+// build the polygon descriptor, including fa, r_nearzi, and u, v, s, t, and z
+// for each vertex
+	r_polydesc.numverts = lnumverts;
+	r_polydesc.nearzi = r_nearzi;
+	r_polydesc.pcurrentface = fa;
+	r_polydesc.pverts = pverts;
 
-//=============================================================================
-
-/*
-================
-Draw_BeginDisc
-
-Draws the little blue disc in the corner of the screen.
-Call before beginning any disc IO.
-================
-*/
-void Draw_BeginDisc (void)
-{
-
-
-#ifdef MACOSX
-	return; // Baker: ARWOP and Warpspasm troubles from this like Quakespasm?
-#endif
-
-#ifdef FLASH
-	if(!draw_disc)
-		return;	//On Windows you can get away without checking for null, because D_BeginDirectRect checks vid_initialized. But not for FLASH
-#endif
-	D_BeginDirectRect (vid.width - 24, 0, draw_disc->data, 24, 24);
+// draw the polygon
+	D_DrawPoly ();
 }
 
 
 /*
 ================
-Draw_EndDisc
-
-Erases the disc icon.
-Call after completing any disc IO
+R_ZDrawSubmodelPolys
 ================
 */
-void Draw_EndDisc (void)
+void R_ZDrawSubmodelPolys (model_t *pmodel)
 {
-	D_EndDirectRect (vid.width - 24, 0, 24, 24);
+	int			i, numsurfaces;
+	msurface_t	*psurf;
+	float		dot;
+	mplane_t	*pplane;
+
+	psurf = &pmodel->surfaces[pmodel->firstmodelsurface];
+	numsurfaces = pmodel->nummodelsurfaces;
+
+	for (i=0 ; i<numsurfaces ; i++, psurf++)
+	{
+	// find which side of the node we are on
+		pplane = psurf->plane;
+
+		dot = DotProduct (modelorg, pplane->normal) - pplane->dist;
+
+	// draw the polygon
+		if (((psurf->flags & SURF_PLANEBACK) && (dot < -BACKFACE_EPSILON)) ||
+			(!(psurf->flags & SURF_PLANEBACK) && (dot > BACKFACE_EPSILON)))
+		{
+		// FIXME: use bounding-box-based frustum clipping info?
+			R_RenderPoly (psurf, 15);
+		}
+	}
 }
+

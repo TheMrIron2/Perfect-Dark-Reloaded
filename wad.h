@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -19,8 +19,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 // wad.h
 
-#ifndef WAD_H
-#define WAD_H
 //===============
 //   TYPES
 //===============
@@ -75,8 +73,16 @@ void	*W_GetLumpName (char *name);
 void	*W_GetLumpNum (int num);
 
 void SwapPic (qpic_t *pic);
-
+/*
 byte *WAD3_LoadTexture(miptex_t *mt);
+byte *ConvertWad3ToRGBA(miptex_t *tex);
+*/
+int WAD3_LoadTexture(miptex_t *mt);
+int WAD3_LoadTextureName(char *name);
+int ConvertWad3ToRGBA(miptex_t *tex);
+void WAD3_LoadTextureWadFile (char *filename);
 
+void W_LoadTextureWadFileHL (char *filename, int complain);
+byte *W_ConvertWAD3TextureHL(miptex_t *tex);
+byte *W_GetTextureHL(char *name);
 
-#endif  // WAD_H

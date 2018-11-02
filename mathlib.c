@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -27,7 +27,35 @@ void Sys_Error (char *error, ...);
 vec3_t vec3_origin = {0,0,0};
 int nanmask = 255<<23;
 
+int  _mathlib_temp_int1, _mathlib_temp_int2, _mathlib_temp_int3;
+float _mathlib_temp_float1, _mathlib_temp_float2, _mathlib_temp_float3;
+vec3_t _mathlib_temp_vec1, _mathlib_temp_vec2, _mathlib_temp_vec3;
+
+
 /*-----------------------------------------------------------------*/
+/*
+=================
+SinCos
+=================
+*/
+void SinCos( float radians, float *sine, float *cosine )
+{
+   *sine   = sinf (radians);
+   *cosine = cosf (radians);
+/*
+	_asm
+	{
+		fld	dword ptr [radians]
+		fsincos
+
+		mov edx, dword ptr [cosine]
+		mov eax, dword ptr [sine]
+
+		fstp dword ptr [edx]
+		fstp dword ptr [eax]
+	}
+*/
+}
 
 void ProjectPointOnPlane( vec3_t dst, const vec3_t p, const vec3_t normal )
 {
@@ -83,21 +111,7 @@ void PerpendicularVector( vec3_t dst, const vec3_t src )
 	VectorNormalize( dst );
 }
 
-void LerpVector (const vec3_t from, const vec3_t to, float frac, vec3_t out)
-{
-	out[0] = from[0] + frac * (to[0] - from[0]);
-	out[1] = from[1] + frac * (to[1] - from[1]);
-	out[2] = from[2] + frac * (to[2] - from[2]);
-}
-
-float VecLength2(vec3_t v1, vec3_t v2)
-{
-	vec3_t k;
-	VectorSubtract(v1, v2, k);
-	return sqrt(k[0]*k[0] + k[1]*k[1] + k[2]*k[2]);
-} 
-
-#ifdef _WIN32
+#ifdef WIN32
 #pragma optimize( "", off )
 #endif
 
@@ -157,7 +171,7 @@ void RotatePointAroundVector( vec3_t dst, const vec3_t dir, const vec3_t point, 
 	}
 }
 
-#ifdef _WIN32
+#ifdef WIN32
 #pragma optimize( "", on )
 #endif
 
@@ -215,7 +229,7 @@ int BoxOnPlaneSide (vec3_t emins, vec3_t emaxs, mplane_t *p)
 		return 3;
 	}
 #endif
-
+	
 // general case
 	switch (p->signbits)
 	{
@@ -300,7 +314,7 @@ if (sides == 0)
 
 #endif
 
-#if 0 // Baker: this mathlib function doesn't get used in the code anywhere
+
 void vectoangles (vec3_t vec, vec3_t ang)
 {
 	float	forward, yaw, pitch;
@@ -312,11 +326,11 @@ void vectoangles (vec3_t vec, vec3_t ang)
 	}
 	else
 	{
-		yaw = atan2 (vec[1], vec[0]) * 180 / M_PI;
+		yaw = vec[0] ? (atan2(vec[1], vec[0]) * 180 / M_PI) : (vec[1] > 0) ? 90 : 270;
 		if (yaw < 0)
 			yaw += 360;
 
-		forward = sqrt (vec[0]*vec[0] + vec[1]*vec[1]);
+		forward = sqrt (vec[0] * vec[0] + vec[1] * vec[1]);
 		pitch = atan2 (vec[2], forward) * 180 / M_PI;
 		if (pitch < 0)
 			pitch += 360;
@@ -326,13 +340,12 @@ void vectoangles (vec3_t vec, vec3_t ang)
 	ang[1] = yaw;
 	ang[2] = 0;
 }
-#endif
 
 void AngleVectors (vec3_t angles, vec3_t forward, vec3_t right, vec3_t up)
 {
 	float		angle;
 	float		sr, sp, sy, cr, cp, cy;
-
+	
 	angle = angles[YAW] * (M_PI*2 / 360);
 	sy = sinf(angle);
 	cy = cosf(angle);
@@ -354,14 +367,22 @@ void AngleVectors (vec3_t angles, vec3_t forward, vec3_t right, vec3_t up)
 	up[2] = cr*cp;
 }
 
+float VectorLength (vec3_t v)
+{
+	float	length;
+
+	length = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+	return sqrt(length);
+}
+
 int VectorCompare (vec3_t v1, vec3_t v2)
 {
 	int		i;
-
+	
 	for (i=0 ; i<3 ; i++)
 		if (v1[i] != v2[i])
 			return 0;
-
+			
 	return 1;
 }
 
@@ -406,9 +427,16 @@ void CrossProduct (vec3_t v1, vec3_t v2, vec3_t cross)
 	cross[2] = v1[0]*v2[1] - v1[1]*v2[0];
 }
 
-vec_t VectorLength(vec3_t v)
+vec_t Length(vec3_t v)
 {
 	return sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+}
+
+float VecLength2(vec3_t v1, vec3_t v2)
+{
+	vec3_t k;
+	VectorSubtract(v1, v2, k);
+	return sqrt(k[0]*k[0] + k[1]*k[1] + k[2]*k[2]);
 }
 
 float VectorNormalize (vec3_t v)
@@ -421,7 +449,7 @@ float VectorNormalize (vec3_t v)
 		v[1] *= ilength;
 		v[2] *= ilength;
 	}
-
+		
 	return length;
 
 }
@@ -520,20 +548,19 @@ Returns mathematically correct (floor-based) quotient and remainder for
 numer and denom, both of which should contain no fractional part. The
 quotient must fit in 32 bits.
 ====================
-//Baker: only software renderer uses this in d_polyse.c
 */
 
-void FloorDivMod (double numer, double denom, int *quotient,
+void FloorDivMod (float numer, float denom, int *quotient,
 		int *rem)
 {
 	int		q, r;
-	double	x;
+	float	x;
 
 #ifndef PARANOID
 	if (denom <= 0.0)
 		Sys_Error ("FloorDivMod: bad denominator %d\n", denom);
 
-//	if ((floor(numer) != numer) || (floor(denom) != denom))
+//	if ((floorf(numer) != numer) || (floor(denom) != denom))
 //		Sys_Error ("FloorDivMod: non-integer numer or denom %f %f\n",
 //				numer, denom);
 #endif
@@ -597,7 +624,6 @@ Invert24To16
 
 Inverts an 8.24 value to a 16.16 value
 ====================
-//Baker: Software renderer only?
 */
 
 fixed16_t Invert24To16(fixed16_t val)
@@ -606,215 +632,329 @@ fixed16_t Invert24To16(fixed16_t val)
 		return (0xFFFFFFFF);
 
 	return (fixed16_t)
-			(((double)0x10000 * (double)0x1000000 / (double)val) + 0.5);
+			(((float)0x10000 * (float)0x1000000 / (float)val) + 0.5);
 }
 
 #endif
 
-int ParseFloats(char *s, float *f, int *f_size) {
-   int i, argc;
-
-   if (!s || !f || !f_size)
-      Sys_Error("ParseFloats() wrong params");
-
-   if (f_size[0] <= 0)
-      return (f_size[0] = 0); // array have no size, unusual but no crime
-
-   Cmd_TokenizeString(s);
-   argc = QMIN(Cmd_Argc(), f_size[0]);
-   
-   for(i = 0; i < argc; i++)
-      f[i] = atof(Cmd_Argv(i));
-
-   for( ; i < f_size[0]; i++)
-      f[i] = 0; // zeroing unused elements
-
-   return (f_size[0] = argc);
-} 
-
-#ifdef SUPPORTS_AUTOID_SOFTWARE
-//This function is GL stylie (use as 2nd arg to ML_MultMatrix4).
-float *Matrix4_NewRotation(float a, float x, float y, float z)
+void VectorTransform (const vec3_t in1, matrix3x4 in2, vec3_t out)
 {
-	static float ret[16];
-	float c = cos(a* M_PI / 180.0);
-	float s = sin(a* M_PI / 180.0);
-
-	ret[0] = x*x*(1-c)+c;
-	ret[4] = x*y*(1-c)-z*s;
-	ret[8] = x*z*(1-c)+y*s;
-	ret[12] = 0;
-
-	ret[1] = y*x*(1-c)+z*s;
-    ret[5] = y*y*(1-c)+c;
-	ret[9] = y*z*(1-c)-x*s;
-	ret[13] = 0;
-
-	ret[2] = x*z*(1-c)-y*s;
-	ret[6] = y*z*(1-c)+x*s;
-	ret[10] = z*z*(1-c)+c;
-	ret[14] = 0;
-
-	ret[3] = 0;
-	ret[7] = 0;
-	ret[11] = 0;
-	ret[15] = 1;
-	return ret;
+	out[0] = DotProduct(in1, in2[0]) + in2[0][3];
+	out[1] = DotProduct(in1, in2[1]) +	in2[1][3];
+	out[2] = DotProduct(in1, in2[2]) +	in2[2][3];
 }
 
-//This function is GL stylie (use as 2nd arg to ML_MultMatrix4).
-float *Matrix4_NewTranslation(float x, float y, float z)
+void AngleQuaternion( const vec3_t angles, vec4_t quaternion )
 {
-	static float ret[16];
-	ret[0] = 1;
-	ret[4] = 0;
-	ret[8] = 0;
-	ret[12] = x;
+	float		angle;
+	float		sr, sp, sy, cr, cp, cy;
 
-	ret[1] = 0;
-    ret[5] = 1;
-	ret[9] = 0;
-	ret[13] = y;
+	// FIXME: rescale the inputs to 1/2 angle
+	angle = angles[2] * 0.5;
+	sy = sin(angle);
+	cy = cos(angle);
+	angle = angles[1] * 0.5;
+	sp = sin(angle);
+	cp = cos(angle);
+	angle = angles[0] * 0.5;
+	sr = sin(angle);
+	cr = cos(angle);
 
-	ret[2] = 0;
-	ret[6] = 0;
-	ret[10] = 1;
-	ret[14] = z;
-
-	ret[3] = 0;
-	ret[7] = 0;
-	ret[11] = 0;
-	ret[15] = 1;
-	return ret;
+	quaternion[0] = sr*cp*cy-cr*sp*sy; // X
+	quaternion[1] = cr*sp*cy+sr*cp*sy; // Y
+	quaternion[2] = cr*cp*sy-sr*sp*cy; // Z
+	quaternion[3] = cr*cp*cy+sr*sp*sy; // W
 }
 
-//be aware that this generates two sorts of matricies depending on order of a+b
-void Matrix4_Multiply(float *a, float *b, float *out)
+void QuaternionMatrix( const vec4_t quaternion, float (*matrix)[4] )
 {
-	out[0]  = a[0] * b[0] + a[4] * b[1] + a[8] * b[2] + a[12] * b[3];
-	out[1]  = a[1] * b[0] + a[5] * b[1] + a[9] * b[2] + a[13] * b[3];
-	out[2]  = a[2] * b[0] + a[6] * b[1] + a[10] * b[2] + a[14] * b[3];
-	out[3]  = a[3] * b[0] + a[7] * b[1] + a[11] * b[2] + a[15] * b[3];
 
-	out[4]  = a[0] * b[4] + a[4] * b[5] + a[8] * b[6] + a[12] * b[7];
-	out[5]  = a[1] * b[4] + a[5] * b[5] + a[9] * b[6] + a[13] * b[7];
-	out[6]  = a[2] * b[4] + a[6] * b[5] + a[10] * b[6] + a[14] * b[7];
-	out[7]  = a[3] * b[4] + a[7] * b[5] + a[11] * b[6] + a[15] * b[7];
+	matrix[0][0] = 1.0 - 2.0 * quaternion[1] * quaternion[1] - 2.0 * quaternion[2] * quaternion[2];
+	matrix[1][0] = 2.0 * quaternion[0] * quaternion[1] + 2.0 * quaternion[3] * quaternion[2];
+	matrix[2][0] = 2.0 * quaternion[0] * quaternion[2] - 2.0 * quaternion[3] * quaternion[1];
 
-	out[8]  = a[0] * b[8] + a[4] * b[9] + a[8] * b[10] + a[12] * b[11];
-	out[9]  = a[1] * b[8] + a[5] * b[9] + a[9] * b[10] + a[13] * b[11];
-	out[10] = a[2] * b[8] + a[6] * b[9] + a[10] * b[10] + a[14] * b[11];
-	out[11] = a[3] * b[8] + a[7] * b[9] + a[11] * b[10] + a[15] * b[11];
+	matrix[0][1] = 2.0 * quaternion[0] * quaternion[1] - 2.0 * quaternion[3] * quaternion[2];
+	matrix[1][1] = 1.0 - 2.0 * quaternion[0] * quaternion[0] - 2.0 * quaternion[2] * quaternion[2];
+	matrix[2][1] = 2.0 * quaternion[1] * quaternion[2] + 2.0 * quaternion[3] * quaternion[0];
 
-	out[12] = a[0] * b[12] + a[4] * b[13] + a[8] * b[14] + a[12] * b[15];
-	out[13] = a[1] * b[12] + a[5] * b[13] + a[9] * b[14] + a[13] * b[15];
-	out[14] = a[2] * b[12] + a[6] * b[13] + a[10] * b[14] + a[14] * b[15];
-	out[15] = a[3] * b[12] + a[7] * b[13] + a[11] * b[14] + a[15] * b[15];
+	matrix[0][2] = 2.0 * quaternion[0] * quaternion[2] + 2.0 * quaternion[3] * quaternion[1];
+	matrix[1][2] = 2.0 * quaternion[1] * quaternion[2] - 2.0 * quaternion[3] * quaternion[0];
+	matrix[2][2] = 1.0 - 2.0 * quaternion[0] * quaternion[0] - 2.0 * quaternion[1] * quaternion[1];
 }
 
-//transform 4d vector by a 4d matrix.
-void Matrix4_Transform4(float *matrix, float *vector, float *product)
+void QuaternionSlerp( const vec4_t p, vec4_t q, float t, vec4_t qt )
 {
-	product[0] = matrix[0]*vector[0] + matrix[4]*vector[1] + matrix[8]*vector[2] + matrix[12]*vector[3];
-	product[1] = matrix[1]*vector[0] + matrix[5]*vector[1] + matrix[9]*vector[2] + matrix[13]*vector[3];
-	product[2] = matrix[2]*vector[0] + matrix[6]*vector[1] + matrix[10]*vector[2] + matrix[14]*vector[3];
-	product[3] = matrix[3]*vector[0] + matrix[7]*vector[1] + matrix[11]*vector[2] + matrix[15]*vector[3];
-}
+	int i;
+	float omega, cosom, sinom, sclp, sclq;
 
-void ML_ProjectionMatrix(float *proj, float wdivh, float fovy)
-{
-	float xmin, xmax, ymin, ymax;
-	float nudge = 1;
+	// decide if one of the quaternions is backwards
+	float a = 0;
+	float b = 0;
+	for (i = 0; i < 4; i++) {
+		a += (p[i]-q[i])*(p[i]-q[i]);
+		b += (p[i]+q[i])*(p[i]+q[i]);
+	}
+	if (a > b) {
+		for (i = 0; i < 4; i++) {
+			q[i] = -q[i];
+		}
+	}
 
-	//proj
-	ymax = 4 * tan( fovy * M_PI / 360.0 );
-	ymin = -ymax;
+	cosom = p[0]*q[0] + p[1]*q[1] + p[2]*q[2] + p[3]*q[3];
 
-	xmin = ymin * wdivh;
-	xmax = ymax * wdivh;
-
-	proj[0] = (2*4) / (xmax - xmin);
-	proj[4] = 0;
-	proj[8] = (xmax + xmin) / (xmax - xmin);
-	proj[12] = 0;
-
-	proj[1] = 0;
-	proj[5] = (2*4) / (ymax - ymin);
-	proj[9] = (ymax + ymin) / (ymax - ymin);
-	proj[13] = 0;
-
-	proj[2] = 0;
-	proj[6] = 0;
-	proj[10] = -1  * nudge;
-	proj[14] = -2*4 * nudge;
-
-	proj[3] = 0;
-	proj[7] = 0;
-	proj[11] = -1;
-	proj[15] = 0;
-}
-
-void ML_ModelViewMatrix(float *modelview, vec3_t viewangles, vec3_t vieworg)
-{
-	float tempmat[16];
-	//load identity.
-	memset(modelview, 0, sizeof(*modelview)*16);
-#if 1
-	modelview[0] = 1;
-	modelview[5] = 1;
-	modelview[10] = 1;
-	modelview[15] = 1;
-
-	Matrix4_Multiply(modelview, Matrix4_NewRotation(-90,  1, 0, 0), tempmat);	    // put Z going up
-	Matrix4_Multiply(tempmat, Matrix4_NewRotation(90,  0, 0, 1), modelview);	    // put Z going up
-#else
-	//use this lame wierd and crazy identity matrix..
-	modelview[2] = -1;
-	modelview[4] = -1;
-	modelview[9] = 1;
-	modelview[15] = 1;
-#endif
-	//figure out the current modelview matrix
-
-	//I would if some of these, but then I'd still need a couple of copys
-	Matrix4_Multiply(modelview, Matrix4_NewRotation(-viewangles[2],  1, 0, 0), tempmat);
-	Matrix4_Multiply(tempmat, Matrix4_NewRotation(-viewangles[0],  0, 1, 0), modelview);
-	Matrix4_Multiply(modelview, Matrix4_NewRotation(-viewangles[1],  0, 0, 1), tempmat);
-
-	Matrix4_Multiply(tempmat, Matrix4_NewTranslation(-vieworg[0],  -vieworg[1],  -vieworg[2]), modelview);	    // put Z going up
-}
-
-
-
-//returns fractions of screen.
-//uses GL style rotations and translations and stuff.
-//3d -> screen (fixme: offscreen return values needed)
-void ML_Project (vec3_t in, vec3_t out, vec3_t viewangles, vec3_t vieworg, float wdivh, float fovy)
-{
-	float modelview[16];
-	float proj[16];
-
-	ML_ModelViewMatrix(modelview, viewangles, vieworg);
-	ML_ProjectionMatrix(proj, wdivh, fovy);
-
-	{
-		float v[4], tempv[4];
-		v[0] = in[0];
-		v[1] = in[1];
-		v[2] = in[2];
-		v[3] = 1;
-
-		Matrix4_Transform4(modelview, v, tempv);
-		Matrix4_Transform4(proj, tempv, v);
-
-		v[0] /= v[3];
-		v[1] /= v[3];
-		v[2] /= v[3];
-
-		out[0] = (1+v[0])/2;
-		out[1] = (1+v[1])/2;
-		out[2] = (1+v[2])/2;
+	if ((1.0 + cosom) > 0.00000001) {
+		if ((1.0 - cosom) > 0.00000001) {
+			omega = acos( cosom );
+			sinom = sin( omega );
+			sclp = sin( (1.0 - t)*omega) / sinom;
+			sclq = sin( t*omega ) / sinom;
+		}
+		else {
+			sclp = 1.0 - t;
+			sclq = t;
+		}
+		for (i = 0; i < 4; i++) {
+			qt[i] = sclp * p[i] + sclq * q[i];
+		}
+	}
+	else {
+		qt[0] = -p[1];
+		qt[1] = p[0];
+		qt[2] = -p[3];
+		qt[3] = p[2];
+		sclp = sin( (1.0 - t) * 0.5 * M_PI);
+		sclq = sin( t * 0.5 * M_PI);
+		for (i = 0; i < 3; i++) {
+			qt[i] = sclp * p[i] + sclq * qt[i];
+		}
 	}
 }
 
-#endif
+/*
+========================================================================
+
+		Matrix4x4 operations
+
+========================================================================
+*/
+
+const matrix4x4 matrix4x4_identity =
+{
+{ 1, 0, 0, 0 },	// PITCH
+{ 0, 1, 0, 0 },	// YAW
+{ 0, 0, 1, 0 },	// ROLL
+{ 0, 0, 0, 1 },	// ORIGIN
+};
+
+void Matrix4x4_VectorTransform( const matrix4x4 in, const float v[3], float out[3] )
+{
+	out[0] = v[0] * in[0][0] + v[1] * in[0][1] + v[2] * in[0][2] + in[0][3];
+	out[1] = v[0] * in[1][0] + v[1] * in[1][1] + v[2] * in[1][2] + in[1][3];
+	out[2] = v[0] * in[2][0] + v[1] * in[2][1] + v[2] * in[2][2] + in[2][3];
+}
+
+void Matrix4x4_VectorITransform( const matrix4x4 in, const float v[3], float out[3] )
+{
+	vec3_t	dir;
+
+	dir[0] = v[0] - in[0][3];
+	dir[1] = v[1] - in[1][3];
+	dir[2] = v[2] - in[2][3];
+
+	out[0] = dir[0] * in[0][0] + dir[1] * in[1][0] + dir[2] * in[2][0];
+	out[1] = dir[0] * in[0][1] + dir[1] * in[1][1] + dir[2] * in[2][1];
+	out[2] = dir[0] * in[0][2] + dir[1] * in[1][2] + dir[2] * in[2][2];
+}
+
+void Matrix4x4_VectorRotate( const matrix4x4 in, const float v[3], float out[3] )
+{
+	out[0] = v[0] * in[0][0] + v[1] * in[0][1] + v[2] * in[0][2];
+	out[1] = v[0] * in[1][0] + v[1] * in[1][1] + v[2] * in[1][2];
+	out[2] = v[0] * in[2][0] + v[1] * in[2][1] + v[2] * in[2][2];
+}
+
+void Matrix4x4_VectorIRotate( const matrix4x4 in, const float v[3], float out[3] )
+{
+	out[0] = v[0] * in[0][0] + v[1] * in[1][0] + v[2] * in[2][0];
+	out[1] = v[0] * in[0][1] + v[1] * in[1][1] + v[2] * in[2][1];
+	out[2] = v[0] * in[0][2] + v[1] * in[1][2] + v[2] * in[2][2];
+}
+
+void Matrix4x4_CreateFromEntity( matrix4x4 out, const vec3_t angles, const vec3_t origin, float scale )
+{
+	float	angle, sr, sp, sy, cr, cp, cy;
+
+	if( angles[ROLL] )
+	{
+		angle = angles[YAW] * (M_PI*2 / 360);
+		SinCos( angle, &sy, &cy );
+		angle = angles[PITCH] * (M_PI*2 / 360);
+		SinCos( angle, &sp, &cp );
+		angle = angles[ROLL] * (M_PI*2 / 360);
+		SinCos( angle, &sr, &cr );
+
+		out[0][0] = (cp*cy) * scale;
+		out[0][1] = (sr*sp*cy+cr*-sy) * scale;
+		out[0][2] = (cr*sp*cy+-sr*-sy) * scale;
+		out[0][3] = origin[0];
+		out[1][0] = (cp*sy) * scale;
+		out[1][1] = (sr*sp*sy+cr*cy) * scale;
+		out[1][2] = (cr*sp*sy+-sr*cy) * scale;
+		out[1][3] = origin[1];
+		out[2][0] = (-sp) * scale;
+		out[2][1] = (sr*cp) * scale;
+		out[2][2] = (cr*cp) * scale;
+		out[2][3] = origin[2];
+		out[3][0] = 0;
+		out[3][1] = 0;
+		out[3][2] = 0;
+		out[3][3] = 1;
+	}
+	else if( angles[PITCH] )
+	{
+		angle = angles[YAW] * (M_PI*2 / 360);
+		SinCos( angle, &sy, &cy );
+		angle = angles[PITCH] * (M_PI*2 / 360);
+		SinCos( angle, &sp, &cp );
+
+		out[0][0] = (cp*cy) * scale;
+		out[0][1] = (-sy) * scale;
+		out[0][2] = (sp*cy) * scale;
+		out[0][3] = origin[0];
+		out[1][0] = (cp*sy) * scale;
+		out[1][1] = (cy) * scale;
+		out[1][2] = (sp*sy) * scale;
+		out[1][3] = origin[1];
+		out[2][0] = (-sp) * scale;
+		out[2][1] = 0;
+		out[2][2] = (cp) * scale;
+		out[2][3] = origin[2];
+		out[3][0] = 0;
+		out[3][1] = 0;
+		out[3][2] = 0;
+		out[3][3] = 1;
+	}
+	else if( angles[YAW] )
+	{
+		angle = angles[YAW] * (M_PI*2 / 360);
+		SinCos( angle, &sy, &cy );
+
+		out[0][0] = (cy) * scale;
+		out[0][1] = (-sy) * scale;
+		out[0][2] = 0;
+		out[0][3] = origin[0];
+		out[1][0] = (sy) * scale;
+		out[1][1] = (cy) * scale;
+		out[1][2] = 0;
+		out[1][3] = origin[1];
+		out[2][0] = 0;
+		out[2][1] = 0;
+		out[2][2] = scale;
+		out[2][3] = origin[2];
+		out[3][0] = 0;
+		out[3][1] = 0;
+		out[3][2] = 0;
+		out[3][3] = 1;
+	}
+	else
+	{
+		out[0][0] = scale;
+		out[0][1] = 0;
+		out[0][2] = 0;
+		out[0][3] = origin[0];
+		out[1][0] = 0;
+		out[1][1] = scale;
+		out[1][2] = 0;
+		out[1][3] = origin[1];
+		out[2][0] = 0;
+		out[2][1] = 0;
+		out[2][2] = scale;
+		out[2][3] = origin[2];
+		out[3][0] = 0;
+		out[3][1] = 0;
+		out[3][2] = 0;
+		out[3][3] = 1;
+	}
+}
+
+void Matrix4x4_ConvertToEntity( const matrix4x4 in, vec3_t angles, vec3_t origin )
+{
+	float xyDist = sqrt( in[0][0] * in[0][0] + in[1][0] * in[1][0] );
+
+	// enough here to get angles?
+	if( xyDist > 0.001f )
+	{
+		angles[0] = RAD2DEG( atan2( -in[2][0], xyDist ) );
+		angles[1] = RAD2DEG( atan2( in[1][0], in[0][0] ) );
+		angles[2] = RAD2DEG( atan2( in[2][1], in[2][2] ) );
+	}
+	else	// forward is mostly Z, gimbal lock
+	{
+		angles[0] = RAD2DEG( atan2( -in[2][0], xyDist ) );
+		angles[1] = RAD2DEG( atan2( -in[0][1], in[1][1] ) );
+		angles[2] = 0;
+	}
+
+	origin[0] = in[0][3];
+	origin[1] = in[1][3];
+	origin[2] = in[2][3];
+}
+
+void Matrix4x4_TransformPositivePlane( const matrix4x4 in, const vec3_t normal, float d, vec3_t out, float *dist )
+{
+	float	scale = sqrt( in[0][0] * in[0][0] + in[0][1] * in[0][1] + in[0][2] * in[0][2] );
+	float	iscale = 1.0f / scale;
+
+	out[0] = (normal[0] * in[0][0] + normal[1] * in[0][1] + normal[2] * in[0][2]) * iscale;
+	out[1] = (normal[0] * in[1][0] + normal[1] * in[1][1] + normal[2] * in[1][2]) * iscale;
+	out[2] = (normal[0] * in[2][0] + normal[1] * in[2][1] + normal[2] * in[2][2]) * iscale;
+	*dist = d * scale + ( out[0] * in[0][3] + out[1] * in[1][3] + out[2] * in[2][3] );
+}
+
+void Matrix4x4_Invert_Simple( matrix4x4 out, const matrix4x4 in1 )
+{
+	// we only support uniform scaling, so assume the first row is enough
+	// (note the lack of sqrt here, because we're trying to undo the scaling,
+	// this means multiplying by the inverse scale twice - squaring it, which
+	// makes the sqrt a waste of time)
+	float	scale = 1.0f / (in1[0][0] * in1[0][0] + in1[0][1] * in1[0][1] + in1[0][2] * in1[0][2]);
+
+	// invert the rotation by transposing and multiplying by the squared
+	// recipricol of the input matrix scale as described above
+	out[0][0] = in1[0][0] * scale;
+	out[0][1] = in1[1][0] * scale;
+	out[0][2] = in1[2][0] * scale;
+	out[1][0] = in1[0][1] * scale;
+	out[1][1] = in1[1][1] * scale;
+	out[1][2] = in1[2][1] * scale;
+	out[2][0] = in1[0][2] * scale;
+	out[2][1] = in1[1][2] * scale;
+	out[2][2] = in1[2][2] * scale;
+
+	// invert the translate
+	out[0][3] = -(in1[0][3] * out[0][0] + in1[1][3] * out[0][1] + in1[2][3] * out[0][2]);
+	out[1][3] = -(in1[0][3] * out[1][0] + in1[1][3] * out[1][1] + in1[2][3] * out[1][2]);
+	out[2][3] = -(in1[0][3] * out[2][0] + in1[1][3] * out[2][1] + in1[2][3] * out[2][2]);
+
+	// don't know if there's anything worth doing here
+	out[3][0] = 0.0f;
+	out[3][1] = 0.0f;
+	out[3][2] = 0.0f;
+	out[3][3] = 1.0f;
+}
+
+void Matrix4x4_ConcatTransforms( matrix4x4 out, const matrix4x4 in1, const matrix4x4 in2 )
+{
+	out[0][0] = in1[0][0] * in2[0][0] + in1[0][1] * in2[1][0] + in1[0][2] * in2[2][0];
+	out[0][1] = in1[0][0] * in2[0][1] + in1[0][1] * in2[1][1] + in1[0][2] * in2[2][1];
+	out[0][2] = in1[0][0] * in2[0][2] + in1[0][1] * in2[1][2] + in1[0][2] * in2[2][2];
+	out[0][3] = in1[0][0] * in2[0][3] + in1[0][1] * in2[1][3] + in1[0][2] * in2[2][3] + in1[0][3];
+	out[1][0] = in1[1][0] * in2[0][0] + in1[1][1] * in2[1][0] + in1[1][2] * in2[2][0];
+	out[1][1] = in1[1][0] * in2[0][1] + in1[1][1] * in2[1][1] + in1[1][2] * in2[2][1];
+	out[1][2] = in1[1][0] * in2[0][2] + in1[1][1] * in2[1][2] + in1[1][2] * in2[2][2];
+	out[1][3] = in1[1][0] * in2[0][3] + in1[1][1] * in2[1][3] + in1[1][2] * in2[2][3] + in1[1][3];
+	out[2][0] = in1[2][0] * in2[0][0] + in1[2][1] * in2[1][0] + in1[2][2] * in2[2][0];
+	out[2][1] = in1[2][0] * in2[0][1] + in1[2][1] * in2[1][1] + in1[2][2] * in2[2][1];
+	out[2][2] = in1[2][0] * in2[0][2] + in1[2][1] * in2[1][2] + in1[2][2] * in2[2][2];
+	out[2][3] = in1[2][0] * in2[0][3] + in1[2][1] * in2[1][3] + in1[2][2] * in2[2][3] + in1[2][3];
+}

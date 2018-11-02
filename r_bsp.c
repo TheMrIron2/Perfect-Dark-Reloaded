@@ -20,12 +20,15 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // r_bsp.c
 
 #include "quakedef.h"
-//#include "r_local.h"
+#include "r_local.h"
 
+//
 // current entity info
+//
 qboolean		insubmodel;
 entity_t		*currententity;
-vec3_t			modelorg, base_modelorg; // modelorg is the viewpoint reletive to
+vec3_t			modelorg, base_modelorg;
+								// modelorg is the viewpoint reletive to
 								// the currently rendering entity
 vec3_t			r_entorigin;	// the currently rendering entity in world
 								// coordinates
@@ -36,12 +39,10 @@ vec3_t			r_worldmodelorg;
 
 int				r_currentbkey;
 
-typedef enum {
-	touchessolid, drawnode, nodrawnode
-} solidstate_t;
+typedef enum {touchessolid, drawnode, nodrawnode} solidstate_t;
 
-#define MAX_BMODEL_VERTS	1000			// 6K
-#define MAX_BMODEL_EDGES	3000		// 12K
+#define MAX_BMODEL_VERTS	500			// 6K
+#define MAX_BMODEL_EDGES	1000		// 12K
 
 static mvertex_t	*pbverts;
 static bedge_t		*pbedges;
@@ -87,8 +88,8 @@ void R_RotateBmodel (void)
 // yaw
 	angle = currententity->angles[YAW];		
 	angle = angle * M_PI*2 / 360;
-	s = sin(angle);
-	c = cos(angle);
+	s = sinf(angle);
+	c = cosf(angle);
 
 	temp1[0][0] = c;
 	temp1[0][1] = s;
@@ -104,8 +105,8 @@ void R_RotateBmodel (void)
 // pitch
 	angle = currententity->angles[PITCH];		
 	angle = angle * M_PI*2 / 360;
-	s = sin(angle);
-	c = cos(angle);
+	s = sinf(angle);
+	c = cosf(angle);
 
 	temp2[0][0] = c;
 	temp2[0][1] = 0;
@@ -122,8 +123,8 @@ void R_RotateBmodel (void)
 // roll
 	angle = currententity->angles[ROLL];		
 	angle = angle * M_PI*2 / 360;
-	s = sin(angle);
-	c = cos(angle);
+	s = sinf(angle);
+	c = cosf(angle);
 
 	temp1[0][0] = 1;
 	temp1[0][1] = 0;
@@ -137,7 +138,9 @@ void R_RotateBmodel (void)
 
 	R_ConcatRotations (temp1, temp3, entity_rotation);
 
+//
 // rotate modelorg and the transformation matrix
+//
 	R_EntityRotate (modelorg);
 	R_EntityRotate (vpn);
 	R_EntityRotate (vright);
@@ -168,7 +171,8 @@ void R_RecursiveClipBPoly (bedge_t *pedges, mnode_t *pnode, msurface_t *psurf)
 // transform the BSP plane into model space
 // FIXME: cache these?
 	splitplane = pnode->plane;
-	tplane.dist = splitplane->dist - DotProduct(r_entorigin, splitplane->normal);
+	tplane.dist = splitplane->dist -
+			DotProduct(r_entorigin, splitplane->normal);
 	tplane.normal[0] = DotProduct (entity_rotation[0], splitplane->normal);
 	tplane.normal[1] = DotProduct (entity_rotation[1], splitplane->normal);
 	tplane.normal[2] = DotProduct (entity_rotation[2], splitplane->normal);
@@ -181,8 +185,8 @@ void R_RecursiveClipBPoly (bedge_t *pedges, mnode_t *pnode, msurface_t *psurf)
 	// set the status for the last point as the previous point
 	// FIXME: cache this stuff somehow?
 		plastvert = pedges->v[0];
-
-		lastdist = DotProduct (plastvert->position, tplane.normal) - tplane.dist;
+		lastdist = DotProduct (plastvert->position, tplane.normal) -
+				   tplane.dist;
 
 		if (lastdist > 0)
 			lastside = 0;
@@ -207,9 +211,15 @@ void R_RecursiveClipBPoly (bedge_t *pedges, mnode_t *pnode, msurface_t *psurf)
 		// generate the clipped vertex
 			frac = lastdist / (lastdist - dist);
 			ptvert = &pbverts[numbverts++];
-			ptvert->position[0] = plastvert->position[0] + frac * (pvert->position[0] - plastvert->position[0]);
-			ptvert->position[1] = plastvert->position[1] + frac * (pvert->position[1] - plastvert->position[1]);
-			ptvert->position[2] = plastvert->position[2] + frac * (pvert->position[2] - plastvert->position[2]);
+			ptvert->position[0] = plastvert->position[0] +
+					frac * (pvert->position[0] -
+					plastvert->position[0]);
+			ptvert->position[1] = plastvert->position[1] +
+					frac * (pvert->position[1] -
+					plastvert->position[1]);
+			ptvert->position[2] = plastvert->position[2] +
+					frac * (pvert->position[2] -
+					plastvert->position[2]);
 
 		// split into two edges, one on each side, and remember entering
 		// and exiting points
@@ -301,7 +311,8 @@ void R_RecursiveClipBPoly (bedge_t *pedges, mnode_t *pnode, msurface_t *psurf)
 				}
 				else
 				{
-					R_RecursiveClipBPoly (psideedges[i], pnode->children[i], psurf);
+					R_RecursiveClipBPoly (psideedges[i], pnode->children[i],
+									  psurf);
 				}
 			}
 		}
@@ -441,7 +452,7 @@ void R_RecursiveWorldNode (mnode_t *node, int clipflags)
 	mplane_t	*plane;
 	msurface_t	*surf, **mark;
 	mleaf_t		*pleaf;
-	double		d, dot;
+	float		d, dot;
 
 	if (node->contents == CONTENTS_SOLID)
 		return;		// solid
@@ -506,7 +517,9 @@ void R_RecursiveWorldNode (mnode_t *node, int clipflags)
 
 	// deal with model fragments in this leaf
 		if (pleaf->efrags)
+		{
 			R_StoreEfrags (&pleaf->efrags);
+		}
 
 		pleaf->key = r_currentkey;
 		r_currentkey++;		// all bmodels in a leaf share the same key
@@ -626,15 +639,12 @@ void R_RecursiveWorldNode (mnode_t *node, int clipflags)
 }
 
 
+
 /*
 ================
 R_RenderWorld
 ================
 */
-#ifdef SUPPORTS_SW_SKYBOX
-extern qboolean r_drawskybox; // Manoel Kasimier - skyboxes
-extern void R_EmitSkyBox (void); // Manoel Kasimier - skyboxes
-#endif
 void R_RenderWorld (void)
 {
 	int			i;
@@ -649,11 +659,6 @@ void R_RenderWorld (void)
 	r_pcurrentvertbase = clmodel->vertexes;
 
 	R_RecursiveWorldNode (clmodel->nodes, 15);
-
-#ifdef SUPPORTS_SW_SKYBOX	
-	if (r_drawskybox) // Manoel Kasimier - skyboxes
-		R_EmitSkyBox (); // Manoel Kasimier - skyboxes
-#endif
 
 // if the driver wants the polygons back to front, play the visible ones back
 // in that order

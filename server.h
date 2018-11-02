@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -40,11 +40,14 @@ typedef struct
 	qboolean	loadgame;			// handle connections specially
 
 	double		time;
-
+	
 	int			lastcheck;			// used by PF_checkclient
 	double		lastchecktime;
-
+	
 	char		name[64];			// map name
+#ifdef BREAKALL
+	char		startspot[64];
+#endif
 	char		modelname[64];		// maps/<name>.bsp, for model_precache[0]
 	struct model_s 	*worldmodel;
 	char		*model_precache[MAX_MODELS];	// NULL terminated
@@ -66,11 +69,6 @@ typedef struct
 
 	sizebuf_t	signon;
 	byte		signon_buf[8192];
-#ifdef PROQUAKE_EXTENSION
-	// JPG - DON'T MODIFY ANYTHING ABOVE THIS POINT (CRMOD 6.X COMPATIBIILITY)
-
-	unsigned long	model_crc[MAX_MODELS];	// JPG - model checking
-#endif
 } server_t;
 
 
@@ -99,29 +97,17 @@ typedef struct client_s
 	edict_t			*edict;				// EDICT_NUM(clientnum+1)
 	char			name[32];			// for printing to other people
 	int				colors;
-
+		
 	float			ping_times[NUM_PING_TIMES];
 	int				num_pings;			// ping_times[num_pings%NUM_PING_TIMES]
 
 // spawn parms are carried from level to level
 	float			spawn_parms[NUM_SPAWN_PARMS];
 
-// client known data for deltas
+// client known data for deltas	
 	int				old_frags;
-#ifdef PROQUAKE_EXTENSION
-	// JPG - DON'T MODIFY ANYTHING ABOVE THIS POINT (CRMOD 6.X COMPATIBIILITY)
-
-	// JPG - added spam_time to prevent spamming.  If time < spam_time then
-	// the client is spamming and is silenced.
-	double			spam_time;
-
-	// JPG 3.00 - prevent clients from rapidly changing their name/colour
-	//            and doing a say or say_team
-	double			change_time;
-
-	// JPG 3.30 - allow clients to connect if they don't have the map
-	qboolean		nomap;
-#endif
+// joe, from ProQuake: allow clients to connect if they don't have the map
+	qboolean	nomap;
 } client_t;
 
 
@@ -139,6 +125,10 @@ typedef struct client_s
 #define	MOVETYPE_NOCLIP			8
 #define	MOVETYPE_FLYMISSILE		9		// extra size to monsters
 #define	MOVETYPE_BOUNCE			10
+#define MOVETYPE_BOUNCEMISSILE	11		// bounce w/o gravity
+#define MOVETYPE_FOLLOW			12		// track movement of aiment
+#define MOVETYPE_COMPOUND		13		// glue two entities together (simple movewith)
+
 
 // edict->solid values
 #define	SOLID_NOT				0		// no interaction with other objects
@@ -159,6 +149,7 @@ typedef struct client_s
 // edict->flags
 #define	FL_FLY					1
 #define	FL_SWIM					2
+//#define	FL_GLIMPSE				4
 #define	FL_CONVEYOR				4
 #define	FL_CLIENT				8
 #define	FL_INWATER				16
@@ -170,35 +161,42 @@ typedef struct client_s
 #define	FL_PARTIALGROUND		1024	// not all corners are valid
 #define	FL_WATERJUMP			2048	// player jumping out of water
 #define	FL_JUMPRELEASED			4096	// for jump debouncing
-#define FL_LOW_BANDWIDTH_CLIENT 8192    // Baker 3.99b: Slot Zero's anti-lag server/mod option for dialup users
-
+#ifdef BREAKALL
+#define FL_FLASHLIGHT			8192
+#define FL_ARCHIVE_OVERRIDE		1048576
+#endif
+#define FL_ALWAYSTHINK			32768
 // entity effects
 
 #define	EF_BRIGHTFIELD			1
 #define	EF_MUZZLEFLASH 			2
 #define	EF_BRIGHTLIGHT 			4
 #define	EF_DIMLIGHT 			8
-#ifdef SUPPORTS_KUROK_PROTOCOL
-#define	EF_REDLIGHT 			16
-#define	EF_BLUELIGHT 			32
-#ifdef QUAKE2
 #define EF_DARKLIGHT			16
 #define EF_DARKFIELD			32
 #define EF_LIGHT				64
 #define EF_NODRAW				128
-#endif
-#else
-#define	EF_NODRAW				16
-#define	EF_BLUE					64
-#define	EF_RED					128
-#define EF_MAYBE_DRAW       32768   // Baker 3.99b: Slot Zero's anti-lag server/mod option for dialup users
-
-#endif
 
 #define	SPAWNFLAG_NOT_EASY			256
 #define	SPAWNFLAG_NOT_MEDIUM		512
 #define	SPAWNFLAG_NOT_HARD			1024
 #define	SPAWNFLAG_NOT_DEATHMATCH	2048
+
+#define	MD_ALPHA             4096
+#define	TX_ALPHA             8192
+#define	TX_SCROLL            16384
+#define	TX_REF               32768
+
+#ifdef BREAKALL
+// server flags
+#define	SFL_EPISODE_1		1
+#define	SFL_EPISODE_2		2
+#define	SFL_EPISODE_3		4
+#define	SFL_EPISODE_4		8
+#define	SFL_NEW_UNIT		16
+#define	SFL_NEW_EPISODE		32
+#define	SFL_CROSS_TRIGGERS	65280
+#endif
 
 //============================================================================
 
@@ -208,24 +206,7 @@ extern	cvar_t	deathmatch;
 extern	cvar_t	coop;
 extern	cvar_t	fraglimit;
 extern	cvar_t	timelimit;
-extern  cvar_t  sv_ipmasking;
-
-#ifdef PROQUAKE_EXTENSION
-extern	cvar_t	pq_fullpitch;	// JPG 2.01
-#endif
-
-extern	cvar_t	sv_maxvelocity;
-extern	cvar_t	sv_gravity;
-extern	cvar_t	sv_nostep;
-extern	cvar_t	sv_friction;
-extern	cvar_t	sv_edgefriction;
-extern	cvar_t	sv_stopspeed;
-extern	cvar_t	sv_maxspeed;
-extern	cvar_t	sv_accelerate;
-extern	cvar_t	sv_idealpitchscale;
-extern	cvar_t	sv_aim;
-extern  cvar_t  alias_sv_aim;
-
+extern	cvar_t	sv_freezenonclients;
 extern	server_static_t	svs;				// persistant server info
 extern	server_t		sv;					// local server
 
@@ -237,13 +218,13 @@ extern	double		host_time;
 
 extern	edict_t		*sv_player;
 
-
 //===========================================================
 
 void SV_Init (void);
 
 void SV_StartParticle (vec3_t org, vec3_t dir, int color, int count);
-void SV_StartSound (edict_t *entity, int channel, char *sample, int volume,float attenuation);
+void SV_StartSound (edict_t *entity, int channel, char *sample, int volume,
+    float attenuation);
 
 void SV_DropClient (qboolean crash);
 
@@ -265,7 +246,7 @@ void SV_BroadcastPrintf (char *fmt, ...);
 void SV_Physics (void);
 
 qboolean SV_CheckBottom (edict_t *ent);
-qboolean SV_MoveStep (edict_t *ent, vec3_t move, qboolean relink);
+qboolean SV_movestep (edict_t *ent, vec3_t move, qboolean relink);
 
 void SV_WriteClientdataToMessage (edict_t *ent, sizebuf_t *msg);
 
@@ -274,4 +255,8 @@ void SV_MoveToGoal (void);
 void SV_CheckForNewClients (void);
 void SV_RunClients (void);
 void SV_SaveSpawnparms ();
+#ifdef BREAKALL
+void SV_SpawnServer (char *server, char *startspot);
+#else
 void SV_SpawnServer (char *server);
+#endif

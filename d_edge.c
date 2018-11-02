@@ -25,13 +25,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 static int	miplevel;
 
 float		scale_for_mip;
-int		screenwidth;
-int		ubasestep, errorterm, erroradjustup, erroradjustdown;
-int		vstartscan;
+int			screenwidth;
+int			ubasestep, errorterm, erroradjustup, erroradjustdown;
+int			vstartscan;
 
 // FIXME: should go away
-extern void	R_RotateBmodel (void);
-extern void	R_TransformFrustum (void);
+extern void			R_RotateBmodel (void);
+extern void			R_TransformFrustum (void);
 
 vec3_t		transformed_modelorg;
 
@@ -152,11 +152,15 @@ void D_CalcGradients (msurface_t *pface)
 
 	t = 0x10000*mipscale;
 	sadjust = ((fixed16_t)(DotProduct (p_temp1, p_saxis) * 0x10000 + 0.5)) -
-			((pface->texturemins[0] << 16) >> miplevel) + pface->texinfo->vecs[0][3]*t;
+			((pface->texturemins[0] << 16) >> miplevel)
+			+ pface->texinfo->vecs[0][3]*t;
 	tadjust = ((fixed16_t)(DotProduct (p_temp1, p_taxis) * 0x10000 + 0.5)) -
-			((pface->texturemins[1] << 16) >> miplevel) + pface->texinfo->vecs[1][3]*t;
+			((pface->texturemins[1] << 16) >> miplevel)
+			+ pface->texinfo->vecs[1][3]*t;
 
+//
 // -1 (-epsilon) so we never wander off the edge of the texture
+//
 	bbextents = ((pface->extents[0] << 16) >> miplevel) - 1;
 	bbextentt = ((pface->extents[1] << 16) >> miplevel) - 1;
 }
@@ -203,12 +207,7 @@ void D_DrawSurfaces (void)
 				continue;
 
 			r_drawnpolycount++;
-#ifdef SUPPORTS_SW_WATERALPHA
-			// Manoel Kasimier - translucent water - begin
-			if (r_drawwater && (!(s->flags & SURF_DRAWTRANSLUCENT)))
-				continue;
-			// Manoel Kasimier - translucent water - end
-#endif
+
 			d_zistepu = s->d_zistepu;
 			d_zistepv = s->d_zistepv;
 			d_ziorigin = s->d_ziorigin;
@@ -216,7 +215,9 @@ void D_DrawSurfaces (void)
 			if (s->flags & SURF_DRAWSKY)
 			{
 				if (!r_skymade)
+				{
 					R_MakeSky ();
+				}
 
 				D_DrawSkyScans8 (s->spans);
 				D_DrawZSpans (s->spans);
@@ -236,7 +237,9 @@ void D_DrawSurfaces (void)
 			{
 				pface = s->data;
 				miplevel = 0;
-				cacheblock = (pixel_t *)((byte *)pface->texinfo->texture + pface->texinfo->texture->offsets[0]);
+				cacheblock = (pixel_t *)
+						((byte *)pface->texinfo->texture +
+						pface->texinfo->texture->offsets[0]);
 				cachewidth = 64;
 
 				if (s->insubmodel)
@@ -245,7 +248,8 @@ void D_DrawSurfaces (void)
 				// TODO: store once at start of frame
 					currententity = s->entity;	//FIXME: make this passed in to
 												// R_RotateBmodel ()
-					VectorSubtract (r_origin, currententity->origin, local_modelorg);
+					VectorSubtract (r_origin, currententity->origin,
+							local_modelorg);
 					TransformVector (local_modelorg, transformed_modelorg);
 
 					R_RotateBmodel ();	// FIXME: don't mess with the frustum,
@@ -254,18 +258,18 @@ void D_DrawSurfaces (void)
 
 				D_CalcGradients (pface);
 				Turbulent8 (s->spans);
-#ifdef SUPPORTS_SW_WATERALPHA
-				if (!r_drawwater) // Manoel Kasimier - translucent water
-#endif
 				D_DrawZSpans (s->spans);
 
 				if (s->insubmodel)
 				{
+				//
 				// restore the old drawing state
 				// FIXME: we don't want to do this every time!
 				// TODO: speed up
+				//
 					currententity = &cl_entities[0];
-					VectorCopy (world_transformed_modelorg, transformed_modelorg);
+					VectorCopy (world_transformed_modelorg,
+								transformed_modelorg);
 					VectorCopy (base_vpn, vpn);
 					VectorCopy (base_vup, vup);
 					VectorCopy (base_vright, vright);
@@ -273,36 +277,6 @@ void D_DrawSurfaces (void)
 					R_TransformFrustum ();
 				}
 			}
-#ifdef SUPPORTS_SW_SKYBOX
-			// Manoel Kasimier - skyboxes - begin
-			// Code taken from the ToChriS engine - Author: Vic (vic@quakesrc.org) (http://hkitchen.quakesrc.org/)
-			else if (s->flags & SURF_DRAWSKYBOX)
-			{
-				extern byte	r_skypixels[6][512*512]; // Manoel Kasimier - hi-res skyboxes - edited
-
-				pface = s->data;
-				miplevel = 0;
-				cacheblock = (byte *)(r_skypixels[pface->texinfo->texture->offsets[0]]);
-				cachewidth = pface->texinfo->texture->width; // Manoel Kasimier - hi-res skyboxes - edited
-
-				d_zistepu = s->d_zistepu;
-				d_zistepv = s->d_zistepv;
-				d_ziorigin = s->d_ziorigin;
-
-				D_CalcGradients (pface);
-
-				(*d_drawspans) (s->spans);
-			
-				// set up a gradient for the background surface that places it
-				// effectively at infinity distance from the viewpoint
-				d_zistepu = 0;
-				d_zistepv = 0;
-				d_ziorigin = -0.9;
-
-				D_DrawZSpans (s->spans);
-			}
-			// Manoel Kasimier - skyboxes - end
-#endif
 			else
 			{
 				if (s->insubmodel)
@@ -336,11 +310,14 @@ void D_DrawSurfaces (void)
 
 				if (s->insubmodel)
 				{
+				//
 				// restore the old drawing state
 				// FIXME: we don't want to do this every time!
 				// TODO: speed up
+				//
 					currententity = &cl_entities[0];
-					VectorCopy (world_transformed_modelorg, transformed_modelorg);
+					VectorCopy (world_transformed_modelorg,
+								transformed_modelorg);
 					VectorCopy (base_vpn, vpn);
 					VectorCopy (base_vup, vup);
 					VectorCopy (base_vright, vright);

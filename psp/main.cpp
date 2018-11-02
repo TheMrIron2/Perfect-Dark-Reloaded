@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -31,23 +31,22 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <psppower.h>
 #include <psprtc.h>
 #include <pspctrl.h>
+#include <psphprm.h>
 #include <pspsdk.h>
 
 extern "C"
 {
 #include "../quakedef.h"
-#include "sysmem_module.h"
-
-#ifdef SLIM_MODEL
-int pspDveMgrSetVideoOut(int, int, int, int, int, int, int);
-#endif
 }
 
 #include "battery.hpp"
 #include "system.hpp"
+#include "module.h"
 
 // Running a dedicated server?
 qboolean isDedicated = qfalse;
+
+qboolean depthfl = qfalse;
 
 extern	int  com_argc;
 extern	char **com_argv;
@@ -55,7 +54,7 @@ extern	char **com_argv;
 void Sys_ReadCommandLineFile (char* netpath);
 
 #define printf	pspDebugScreenPrintf
-#define MIN_HEAP_MB	14
+#define MIN_HEAP_MB	6
 #define MAX_HEAP_MB (PSP_HEAP_SIZE_MB-1)
 
 namespace quake
@@ -68,28 +67,28 @@ namespace quake
 		extern const int		busClockSpeed	= scePowerGetBusClockFrequencyInt();
 
 #ifdef PSP_SOFTWARE_VIDEO
+	#ifdef SLIM
 		// How big a heap to allocate.
-	#ifdef NORMAL_MODEL
 		static size_t  heapSize	= 17 * 1024 * 1024;
-	#endif
-    #ifdef SLIM_MODEL
-		static size_t  heapSize	= 16 * 1024 * 1024;
-    #endif
+	#else
+		static size_t  heapSize	= 17 * 1024 * 1024;
+	#endif // KERNEL_MODE
 #else
+	#ifdef SLIM
 		// How big a heap to allocate.
-	#ifdef NORMAL_MODEL
-        static size_t  heapSize	= 13 * 1024 * 1024;
-	#endif
-    #ifdef SLIM_MODEL
-		static size_t  heapSize	= 34 * 1024 * 1024;
-    #endif
-#endif
+		static size_t  heapSize	= 23 * 1024 * 1024;
+	#else
+		static size_t  heapSize	= 10 * 1024 * 1024;
+	#endif // KERNEL_MODE
+#endif // PSP_SOFTWARE_VIDEO
+
 		// Should the main loop stop running?
 		static volatile bool	quit			= false;
 
 		// Is the PSP in suspend mode?
 		static volatile bool	suspended		= false;
 
+//#ifdef KERNEL_MODE
 		static int exitCallback(int arg1, int arg2, void* common)
 		{
 			// Signal the main thread to stop.
@@ -136,7 +135,7 @@ namespace quake
 				sceKernelStartThread(thid, 0, 0);
 			return thid;
 		}
-
+//#endif
 
 		static void disableFloatingPointExceptions()
 		{
@@ -158,8 +157,6 @@ namespace quake
 	}
 }
 
-extern bool bmg_type_changed;
-
 using namespace quake;
 using namespace quake::main;
 
@@ -178,18 +175,18 @@ int CheckParm (char **args, int argc, char *parm)
 	{
 		if (!args[i])
 			continue;               // NEXTSTEP sometimes clears appkit vars.
-		if (!strcmp (parm,args[i]))
+		if (!Q_strcmp (parm,args[i]))
 			return i;
 	}
 		
 	return 0;
 }
 
-
 void StartUpParams(char **args, int argc, char *cmdlinePath, char *currentDirectory, char *gameDirectory) 
 {
 
-	if (CheckParm(args, f_argc,"-prompt")) {
+	if (CheckParm(args, f_argc,"-prompt")) 
+      {
 		SceCtrlData pad;
 		pspDebugScreenInit();
 	
@@ -198,12 +195,12 @@ void StartUpParams(char **args, int argc, char *cmdlinePath, char *currentDirect
 		
 		bool done = false;
 		
-		int menu_min[7] = {0,0,0,0,0,0,0};
-		int menu_max[7] = {0,1,(MAX_HEAP_MB - MIN_HEAP_MB)-1,1,1,1,1};
-		int menu_cur[7] = {0,0,0,0,0,0,0};
+		int menu_min[3] = {0,0,0};
+		int menu_max[3] = {0,1,(MAX_HEAP_MB - MIN_HEAP_MB)-1};
+		int menu_cur[3] = {0,0,0};
 		
 		int menu_item_min = 0;
-		int menu_item_max = 6;
+		int menu_item_max = 2;
 		int menu_item_cur = 0;
 					
 		char temp_str[16];
@@ -211,22 +208,6 @@ void StartUpParams(char **args, int argc, char *cmdlinePath, char *currentDirect
 		char *cpus[2];
 		cpus[0] = strdup("222");
 		cpus[1] = strdup("333");
-		
-		char *vfilter[2];
-		vfilter[0] = strdup("OFF");
-		vfilter[1] = strdup("ON");
-		
-		char *hipnotic[2];
-		hipnotic[0] = strdup("OFF");
-		hipnotic[1] = strdup("ON");
-		
-		char *rogue[2];
-		rogue[0] = strdup("OFF");
-		rogue[1] = strdup("ON");
-		
-		char *modmusic[2];
-		modmusic[0] = strdup("OFF");
-		modmusic[1] = strdup("ON");
 		
 		char *heaps[MAX_HEAP_MB - MIN_HEAP_MB];
 		for (int i = 0 ;i < MAX_HEAP_MB - MIN_HEAP_MB; i++) {
@@ -262,15 +243,6 @@ void StartUpParams(char **args, int argc, char *cmdlinePath, char *currentDirect
 		
 		if (CheckParm(args, f_argc, "-cpu333"))
 			menu_cur[1] = 1;
-			
-		if (CheckParm(args, f_argc, "-linear"))
-			menu_cur[3] = 1;
-			
-		if (CheckParm(args, f_argc, "-hipnotic"))
-			menu_cur[4] = 1;
-			
-		if (CheckParm(args, f_argc, "-setmodmusic"))
-			menu_cur[6] = 1;
 		
 		if (CheckParm(args, f_argc, "-heap")) {
 			int idx = CheckParm(args, f_argc, "-heap");
@@ -324,7 +296,7 @@ void StartUpParams(char **args, int argc, char *cmdlinePath, char *currentDirect
 			
 			pspDebugScreenSetTextColor(0xffffff);
 			
-			printf("Insomnia ProQuake 4.71 Revision 4\n");
+			printf("DQuake v%4.2f \n", (float)VERSION);
 			printf("---------------- \n");
 			printf("Command line file : %s \n", cmdlinePath);
 			printf("Startup directory : %s \n", currentDirectory);
@@ -334,11 +306,6 @@ void StartUpParams(char **args, int argc, char *cmdlinePath, char *currentDirect
 			printf("\n");
 			
 			pspDebugScreenSetTextColor(0x00ffff);
-			
-			if (menu_cur[4] == 1)
-				menu_cur[5] = 0;
-			if (menu_cur[5] == 1)
-				menu_cur[4] = 0;
 			
 			if (j > -1) {
 				if (menu_item_cur == 0) 
@@ -354,35 +321,17 @@ void StartUpParams(char **args, int argc, char *cmdlinePath, char *currentDirect
 			if (menu_item_cur == 2) 
 				pspDebugScreenSetTextColor(0x00ff00);
 			printf("Heap Size         : [%d/%d] '%s' \t \n", 1+menu_cur[2], 1+menu_max[2], heaps[menu_cur[2]]);
-			pspDebugScreenSetTextColor(0x00ffff);
-			
-			if (menu_item_cur == 3) 
-				pspDebugScreenSetTextColor(0x00ff00);
-			printf("Texture Filtering : [%d/%d] '%s' \t \n", 1+menu_cur[3], 1+menu_max[3], vfilter[menu_cur[3]]);
-			pspDebugScreenSetTextColor(0x00ffff);
-			
-			if (menu_item_cur == 4) 
-				pspDebugScreenSetTextColor(0x00ff00);
-			printf("Hipnotic Mode     : [%d/%d] '%s' \t \n", 1+menu_cur[4], 1+menu_max[4], hipnotic[menu_cur[4]]);
-			pspDebugScreenSetTextColor(0x00ffff);
-			
-			if (menu_item_cur == 5) 
-				pspDebugScreenSetTextColor(0x00ff00);
-			printf("Rogue Mode        : [%d/%d] '%s' \t \n", 1+menu_cur[5], 1+menu_max[5], modmusic[menu_cur[5]]);
-			pspDebugScreenSetTextColor(0x00ffff);
-			
-			if (menu_item_cur == 6) 
-				pspDebugScreenSetTextColor(0x00ff00);
-			printf("Mod Music         : [%d/%d] '%s' \t \n", 1+menu_cur[6], 1+menu_max[6], modmusic[menu_cur[6]]);
 			pspDebugScreenSetTextColor(0xffffff);
 			
 			if (pad.Buttons != 0) {
 				if (pad.Buttons & PSP_CTRL_CIRCLE){
+                    pspDebugScreenSetTextColor(0x0000ff);
+                    printf("\n");
+					printf("Shutting down...\n");
+                    printf("\n");
+					pspDebugScreenSetTextColor(0x00ffff);
 					Sys_Quit();
-				}
-				if (pad.Buttons & PSP_CTRL_HOME){
-					sceKernelExitGame();
-				} 				
+				} 
 				if (pad.Buttons & PSP_CTRL_CROSS){
 					done = true;
 				} 	
@@ -402,6 +351,23 @@ void StartUpParams(char **args, int argc, char *cmdlinePath, char *currentDirect
 					menu_cur[menu_item_cur]++;
 					menu_cur[menu_item_cur] = (menu_cur[menu_item_cur] > menu_max[menu_item_cur] ? menu_max[menu_item_cur] : menu_cur[menu_item_cur]);
 				}      
+			}
+			if(sceHprmIsRemoteExist()){
+               unsigned int hprmkey;
+	           sceHprmPeekCurrentKey(&hprmkey);
+			   if (hprmkey != 0){
+                   if (hprmkey & PSP_HPRM_BACK){
+                      menu_cur[menu_item_cur]--;
+					  menu_cur[menu_item_cur] = (menu_cur[menu_item_cur] < menu_min[menu_item_cur] ? menu_min[menu_item_cur] : menu_cur[menu_item_cur]);
+				   }
+				   if (hprmkey & PSP_HPRM_FORWARD){
+                      menu_cur[menu_item_cur]++;
+					  menu_cur[menu_item_cur] = (menu_cur[menu_item_cur] > menu_max[menu_item_cur] ? menu_max[menu_item_cur] : menu_cur[menu_item_cur]);
+				   }
+				   if (hprmkey & PSP_HPRM_PLAYPAUSE){
+					done = true;
+				   }
+				}
 			}
 			
 		}
@@ -472,65 +438,6 @@ void StartUpParams(char **args, int argc, char *cmdlinePath, char *currentDirect
 
 			f_argc += 2;
 		}
-		
-		
-		if (stricmp(vfilter[menu_cur[3]],"ON") == 0) {
-			if (!CheckParm(args, f_argc, "-linear")) {
-				int len1 = strlen("-linear");
-				
-				args[f_argc] = new char[len1+1];
-				strcpy(args[f_argc], "-linear");
-				
-				f_argc += 1;
-			}
-		}
-		if (stricmp(vfilter[menu_cur[3]],"OFF") == 0){
-				int len1 = strlen("-nearest");
-				
-				args[f_argc] = new char[len1+1];
-				strcpy(args[f_argc], "-nearest");
-				
-				f_argc += 1;
-				}
-			
-		
-		if (stricmp(hipnotic[menu_cur[4]],"ON") == 0) {
-		
-			if (!CheckParm(args, f_argc, "-hinotic")) {
-				int len1 = strlen("-hipnotic");
-				
-				args[f_argc] = new char[len1+1];
-				strcpy(args[f_argc], "-hipnotic");
-				
-				f_argc += 1;
-			}
-		}
-		
-		if (stricmp(hipnotic[menu_cur[5]],"ON") == 0) {
-		
-			if (!CheckParm(args, f_argc, "-rogue")) {
-				int len1 = strlen("-rogue");
-				
-				args[f_argc] = new char[len1+1];
-				strcpy(args[f_argc], "-rogue");
-				
-				f_argc += 1;
-			}
-		}
-		
-		
-		if (stricmp(modmusic[menu_cur[6]],"ON") == 0) {
-		
-			if (!CheckParm(args, f_argc, "-modmusic")) {
-				int len1 = strlen("-modmusic");
-				
-				args[f_argc] = new char[len1+1];
-				strcpy(args[f_argc], "-modmusic");
-				
-				f_argc += 1;
-			}
-		}
-		
 			
 		// get rid of temp. alloc memory
 		for (int i = 0 ;i < MAX_HEAP_MB - MIN_HEAP_MB; i++) {
@@ -541,19 +448,49 @@ void StartUpParams(char **args, int argc, char *cmdlinePath, char *currentDirect
 		}
 		free(cpus[0]);
 		free(cpus[1]);
-		free(vfilter[0]);
-		free(vfilter[1]);
-		free(hipnotic[0]);
-		free(hipnotic[1]);
-		free(modmusic[0]);
-		free(modmusic[1]);
-		free(rogue[0]);
-		free(rogue[1]);
 		pspDebugScreenClear(); 
 	}
 }
 
-int main(int argc, char *argv[])		
+#if 0
+int ctrl_kernel = 0;
+SceUID mod[2];
+char mod_names[2][64];
+
+void InitExtModules (void)
+{
+    sprintf(mod_names[0],"hooks/ctrlhook.prx");
+	mod[0] = pspSdkLoadStartModule(mod_names[0], PSP_MEMORY_PARTITION_KERNEL);
+	if (mod[0] < 0)
+	{
+        Con_Printf("CWBHOOK failed to load %s (%08x)\n", mod_names[0], mod[0]);
+	}
+
+	if(mod[0] < 0)
+       ctrl_kernel = 0;
+	else
+       ctrl_kernel = 1;
+   /*
+    sprintf(mod_names[1],"hooks/dvemgr.prx");
+	mod[1] = pspSdkLoadStartModule(mod_names[1], PSP_MEMORY_PARTITION_KERNEL);
+	if (mod[1] < 0)
+	{
+        Con_Printf("CWBHOOK failed to load %s (%08x)\n", mod_names[1], mod[1]);
+	}
+   */
+}
+
+void ShutdownExtModules (void)
+{
+  	if(mod[0] < 0)
+	   return;
+
+	sceKernelStopModule(mod[0], 0, 0, 0, 0);
+	sceKernelUnloadModule(mod[0]);
+}
+#endif
+
+int main(int argc, char *argv[])
 {
 #ifdef KERNEL_MODE
 	// Load the network modules
@@ -577,7 +514,9 @@ int user_main(SceSize argc, void* argp)
 	// Set up the callback thread, this is not appropriate for use with
 	// the loader, so don't bother calling it as it apparently seems to
 	// cause problems with firmware 2.0+
-	//setUpCallbackThread(); //<-- dark_duke removal 7/6/2016
+	setUpCallbackThread();
+
+
 
 
 	// Disable floating point exceptions.
@@ -585,21 +524,24 @@ int user_main(SceSize argc, void* argp)
 	// operations.
 	disableFloatingPointExceptions();
 
+	
 	// Initialise the Common module.
-
+#if 0
+    InitExtModules ();
+#endif
 	// Get the current working dir.
 	char currentDirectory[1024];
 	char gameDirectory[1024];
-
+	
 	memset(gameDirectory, 0, sizeof(gameDirectory));
 	memset(currentDirectory, 0, sizeof(currentDirectory));
 	getcwd(currentDirectory, sizeof(currentDirectory) - 1);
-
+	
 	char   path_f[256];
 	strcpy(path_f,currentDirectory);
-	strcat(path_f,"/quake.cmdline");
+	strcat(path_f,"/setup.ini");
 	Sys_ReadCommandLineFile(path_f);
-
+	
 	char *args[MAX_NUM_ARGVS];
 	
 	for (int k =0; k < f_argc; k++) {
@@ -607,7 +549,10 @@ int user_main(SceSize argc, void* argp)
 		args[k] = new char[len+1];
 		strcpy(args[k], f_argv[k]);
 	}
-	
+
+	if (CheckParm(args, f_argc,"-32depth"))
+	    depthfl = qtrue;
+
 	if (CheckParm(args, f_argc, "-gamedir")) {
 		char* tempStr = args[CheckParm(args, f_argc,"-gamedir")+1]; 
 		strncpy(gameDirectory, tempStr, sizeof(gameDirectory)-1);
@@ -619,28 +564,7 @@ int user_main(SceSize argc, void* argp)
 
 	/////
 	StartUpParams(args, f_argc, path_f, currentDirectory, gameDirectory);
-	setUpCallbackThread();
 	
-	if (CheckParm(args, f_argc, "-linear")) {
-		char* tempStr = args[CheckParm(args, f_argc,"-linear")+1];
-	}
-		
-	if (CheckParm(args, f_argc, "-nearest")) {
-		char* tempStr = args[CheckParm(args, f_argc,"-nearest")+1];
-	}
-	
-	if (CheckParm(args, f_argc, "-hipnotic")) {
-	char* tempStr = args[CheckParm(args, f_argc,"-hipnotic")+1];
-	}
-	
-	if (CheckParm(args, f_argc, "-rogue")) {
-	char* tempStr = args[CheckParm(args, f_argc,"-rogue")+1];
-	}
-	
-	if (CheckParm(args, f_argc, "-modmusic")) {
-	char* tempStr = args[CheckParm(args, f_argc,"-modmusic")+1];
-	}
-		
 	if (CheckParm(args, f_argc, "-heap")) {
 		char* tempStr = args[CheckParm(args, f_argc,"-heap")+1]; 
 		int heapSizeMB = atoi(tempStr);
@@ -653,7 +577,6 @@ int user_main(SceSize argc, void* argp)
 			
 		heapSize = heapSizeMB * 1024 * 1024;
 	}
-	
 	// Allocate the heap.
 	std::vector<unsigned char>	heap(heapSize, 0);
 
@@ -662,7 +585,7 @@ int user_main(SceSize argc, void* argp)
 		args[f_argc++] = "-condebug";
 		COM_InitArgv(f_argc, args);
 	}
-	else {
+	else {	
 		args[0] = "";
 		args[1] = "-condebug";
 		COM_InitArgv(2, args);
@@ -675,31 +598,16 @@ int user_main(SceSize argc, void* argp)
 		COM_InitArgv(0, NULL);
 	}
 #endif
-
+	
 #ifdef PSP_SOFTWARE_VIDEO
 	// Bump up the clock frequency.
-//	if (tcpipAvailable)
-//	    scePowerSetClockFrequency(300, 300, 150); // Stop wifi problems
-//    else
-	    scePowerSetClockFrequency(333, 333, 166);
+	if (!COM_CheckParm("-cpu222")) 
+		scePowerSetClockFrequency(333, 333, 166);
 #else
-	if (COM_CheckParm("-cpu333"))
-	{
-//	    if (tcpipAvailable)
-//	        scePowerSetClockFrequency(300, 300, 150); // Stop wifi problems
-//        else
-	        scePowerSetClockFrequency(333, 333, 166);
-    }
+	if (COM_CheckParm("-cpu333")) 
+		scePowerSetClockFrequency(333, 333, 166);
 #endif
 
-	if (COM_CheckParm("-gamedir")) {
-		char* tempStr = com_argv[COM_CheckParm("-gamedir")+1];
-		strncpy(gameDirectory, tempStr, sizeof(gameDirectory)-1);
-	}
-	else
-	{
-		strncpy(gameDirectory,currentDirectory,sizeof(gameDirectory)-1);
-	}
 	// Catch exceptions from here.
 	try
 	{
@@ -721,24 +629,13 @@ int user_main(SceSize argc, void* argp)
 		sceRtcGetCurrentTick(&lastTicks);
 
 		// Enter the main loop.
-
-#ifdef PSP_MP3HARDWARE_MP3LIB
-		extern int changeMp3Volume;
-		extern void CDAudio_VolumeChange(float bgmvolume);
-#endif
 		while (!quit)
 		{
-
-#ifdef PSP_MP3HARDWARE_MP3LIB
-			if(changeMp3Volume) CDAudio_VolumeChange(bgmvolume.value);
-#endif
-
 			// Handle suspend & resume.
 			if (suspended)
 			{
 				// Suspend.
 				S_ClearBuffer();
-
 				quake::system::suspend();
 
 				// Wait for resume.
@@ -753,7 +650,7 @@ int user_main(SceSize argc, void* argp)
 				// Reset the clock.
 				sceRtcGetCurrentTick(&lastTicks);
 			}
-
+            
 			// What is the time now?
 			u64 ticks;
 			sceRtcGetCurrentTick(&ticks);
@@ -764,10 +661,9 @@ int user_main(SceSize argc, void* argp)
 
 			// Check the battery status.
 			battery::check();
-
+			
 			// Run the frame.
 			Host_Frame(deltaSeconds);
-
 			// Remember the time for next frame.
 			lastTicks = ticks;
 		}
@@ -790,28 +686,28 @@ void Sys_ReadCommandLineFile (char* netpath)
 	int     remaining, count;
 	char    buf[4096];
 	int     argc = 1;
-
+	
 	remaining = Sys_FileOpenRead (netpath, &in);
-
-	if (in > 0 && remaining > 0) {
+	
+	if (in > 0 && remaining > 0) {            
 		count = Sys_FileRead (in, buf, 4096);
 		f_argv[0] = empty_string;
-
+	
 		char* lpCmdLine = buf;
-
+	
 		while (*lpCmdLine && (argc < MAX_NUM_ARGVS))
 		{
 			while (*lpCmdLine && ((*lpCmdLine <= 32) || (*lpCmdLine > 126)))
 				lpCmdLine++;
-
+	
 			if (*lpCmdLine)
 			{
 				f_argv[argc] = lpCmdLine;
 				argc++;
-
+	
 				while (*lpCmdLine && ((*lpCmdLine > 32) && (*lpCmdLine <= 126)))
 					lpCmdLine++;
-
+	
 				if (*lpCmdLine)
 				{
 					*lpCmdLine = 0;
@@ -823,7 +719,7 @@ void Sys_ReadCommandLineFile (char* netpath)
 	} else {
 		f_argc = 0;
 	}
-
+	
 	if (in > 0)
 		Sys_FileClose (in);
 }

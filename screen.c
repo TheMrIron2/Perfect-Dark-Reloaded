@@ -929,6 +929,7 @@ void SCR_UpdateScreen (void)
 		SCR_DrawPause ();
 		SCR_CheckDrawCenterString ();
 		Sbar_Draw ();
+		SHOWLMP_drawall ();
 		SCR_DrawConsole ();
 		M_Draw ();
 	}

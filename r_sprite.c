@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
@@ -20,14 +20,14 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // r_sprite.c
 
 #include "quakedef.h"
-//#include "r_local.h"
+#include "r_local.h"
 
 static int				clip_current;
 static vec5_t			clip_verts[2][MAXWORKINGVERTS];
 static int				sprite_width, sprite_height;
 
 spritedesc_t			r_spritedesc;
-
+	
 
 /*
 ================
@@ -37,7 +37,7 @@ R_RotateSprite
 void R_RotateSprite (float beamlength)
 {
 	vec3_t	vec;
-
+	
 	if (beamlength == 0.0)
 		return;
 
@@ -59,11 +59,12 @@ int R_ClipSpriteFace (int nump, clipplane_t *pclipplane)
 {
 	int		i, outcount;
 	float	dists[MAXWORKINGVERTS+1];
-	float	frac, clipdist, *pclipnormal, *in, *instep, *outstep, *vert2;
+	float	frac, clipdist, *pclipnormal;
+	float	*in, *instep, *outstep, *vert2;
 
 	clipdist = pclipplane->dist;
 	pclipnormal = pclipplane->normal;
-
+	
 // calc dists
 	if (clip_current)
 	{
@@ -77,16 +78,16 @@ int R_ClipSpriteFace (int nump, clipplane_t *pclipplane)
 		outstep = clip_verts[1][0];
 		clip_current = 1;
 	}
-
+	
 	instep = in;
 	for (i=0 ; i<nump ; i++, instep += sizeof (vec5_t) / sizeof (float))
 	{
 		dists[i] = DotProduct (instep, pclipnormal) - clipdist;
 	}
-
+	
 // handle wraparound case
 	dists[nump] = dists[0];
-	memcpy (instep, in, sizeof (vec5_t));
+	Q_memcpy (instep, in, sizeof (vec5_t));
 
 
 // clip the winding
@@ -97,7 +98,7 @@ int R_ClipSpriteFace (int nump, clipplane_t *pclipplane)
 	{
 		if (dists[i] >= 0)
 		{
-			memcpy (outstep, instep, sizeof (vec5_t));
+			Q_memcpy (outstep, instep, sizeof (vec5_t));
 			outstep += sizeof (vec5_t) / sizeof (float);
 			outcount++;
 		}
@@ -107,12 +108,12 @@ int R_ClipSpriteFace (int nump, clipplane_t *pclipplane)
 
 		if ( (dists[i] > 0) == (dists[i+1] > 0) )
 			continue;
-
+			
 	// split it into a new vertex
 		frac = dists[i] / (dists[i] - dists[i+1]);
-
+			
 		vert2 = instep + sizeof (vec5_t) / sizeof (float);
-
+		
 		outstep[0] = instep[0] + frac*(vert2[0] - instep[0]);
 		outstep[1] = instep[1] + frac*(vert2[1] - instep[1]);
 		outstep[2] = instep[2] + frac*(vert2[2] - instep[2]);
@@ -121,8 +122,8 @@ int R_ClipSpriteFace (int nump, clipplane_t *pclipplane)
 
 		outstep += sizeof (vec5_t) / sizeof (float);
 		outcount++;
-	}
-
+	}	
+	
 	return outcount;
 }
 
@@ -210,7 +211,7 @@ void R_SetupAndDrawSprite ()
 
 		pout->s = pv[3];
 		pout->t = pv[4];
-
+		
 		scale = xscale * pout->zi;
 		pout->u = (xcenter + scale * transformed[0]);
 
@@ -369,7 +370,8 @@ void R_DrawSprite (void)
 	else if (psprite->type == SPR_ORIENTED)
 	{
 	// generate the sprite's axes, according to the sprite's world orientation
-		AngleVectors (currententity->angles, r_spritedesc.vpn, r_spritedesc.vright, r_spritedesc.vup);
+		AngleVectors (currententity->angles, r_spritedesc.vpn,
+					  r_spritedesc.vright, r_spritedesc.vup);
 	}
 	else if (psprite->type == SPR_VP_PARALLEL_ORIENTED)
 	{
@@ -377,8 +379,8 @@ void R_DrawSprite (void)
 	// that plane around the center according to the sprite entity's roll
 	// angle. So vpn stays the same, but vright and vup rotate
 		angle = currententity->angles[ROLL] * (M_PI*2 / 360);
-		sr = sin(angle);
-		cr = cos(angle);
+		sr = sinf(angle);
+		cr = cosf(angle);
 
 		for (i=0 ; i<3 ; i++)
 		{
