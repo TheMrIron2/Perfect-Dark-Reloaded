@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #define	QUAKE_GAME			// as opposed to utilities
 
-#define	VERSION             1.1 //0.11/0.44/0.88/1.0/
+#define	VERSION             0.1 //0.11/0.44/0.88/1.0/
 #define	GLQUAKE_VERSION		1.44
 #define	D3DQUAKE_VERSION	0.01
 #define	WINQUAKE_VERSION	0.996
@@ -33,11 +33,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 //define	PARANOID			// speed sapping error checking
 #define DQDIRNAME   "dquake"
 
-#ifdef QUAKE2
-#define	GAMENAME	"id1"		// directory to look in by default
-#else
-#define	GAMENAME	"id1"
-#endif
+#define	GAMENAME	"pdr"
 
 #include <math.h>
 #include <string.h>

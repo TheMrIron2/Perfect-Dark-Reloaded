@@ -318,7 +318,7 @@ void Sys_Error (char *error, ...)
 	}
 
 	pspDebugScreenSetTextColor(0x0000af);
-	pspDebugScreenPrintf("PSP DQuake v:%4.2f \n",(float)VERSION);
+	pspDebugScreenPrintf("Perfect Dark: Reloaded v:%4.2f \n",(float)VERSION);
 	pspDebugScreenSetTextColor(0x10ffae);
 	pspDebugScreenPrintf("The following error occurred:\n");
 	pspDebugScreenSetTextColor(0x00ffff);
