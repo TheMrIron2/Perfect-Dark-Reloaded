@@ -5,7 +5,7 @@ PSPLIBSDIR = $(PSPSDK)/..
 PSP_LARGE_MEMORY = 1
 
 TARGET = DQuake
-PSP_EBOOT_TITLE = PSP DarkQuake SLIM ver: Plus
+PSP_EBOOT_TITLE = Perfect Dark - Reloaded
 
 #PSP_EBOOT_ICON = icon.png
 PSP_EBOOT_PIC1 = PIC0.PNG
@@ -159,19 +159,5 @@ font.c : font.raw
 	bin2c font.raw font.c font
 
 kx-install: kxploit
-ifeq ($(PSP_MOUNT),)
-	@echo '*** Error: $$(PSP_MOUNT) undefined. Please set it to for example /cygdrive/e'
-	@echo if your PSP is mounted to E: in cygwin.
-else
-	cp -r $(TARGET) $(PSP_MOUNT)/PSP/GAME/
-	cp -r $(TARGET)% $(PSP_MOUNT)/PSP/GAME/
-endif
-
 install: EBOOT.PBP
-ifeq ($(PSP_MOUNT),)
-	@echo '*** Error: $$(PSP_MOUNT) undefined. Please set it to for example /cygdrive/e'
-	@echo if your PSP is mounted to E: in cygwin.
-else
-	-mkdir $(PSP_MOUNT)/PSP/GAME/$(TARGET)
-	cp EBOOT.PBP $(PSP_MOUNT)/PSP/GAME/$(TARGET)/
-endif
+	mv EBOOT.PBP ../../../
