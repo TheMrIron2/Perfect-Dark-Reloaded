@@ -892,7 +892,7 @@ void Host_Init (quakeparms_t *parms)
 	NET_Init ();
 	SV_Init ();
 
-	Con_Printf ("PSP DQ v%4.1f (PBP: "__TIME__" "__DATE__")\n", (float)(VERSION));
+	Con_Printf ("Perfect Dark: Reloaded v%4.1f (PBP: "__TIME__" "__DATE__")\n", (float)(VERSION));
 	Con_Printf ("%4.1f megabyte heap \n",parms->memsize/ (1024*1024.0));
 
 	R_InitTextures ();		// needed even for dedicated servers
@@ -943,7 +943,7 @@ void Host_Init (quakeparms_t *parms)
 #endif
 	}
 
-	Cbuf_InsertText ("exec quake.rc\n");
+	Cbuf_InsertText ("exec pdr.rc\n");
 
 	Hunk_AllocName (0, "-HOST_HUNKLEVEL-");
 	host_hunklevel = Hunk_LowMark ();

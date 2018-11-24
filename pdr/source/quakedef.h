@@ -31,7 +31,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define	X11_VERSION			1.10
 
 //define	PARANOID			// speed sapping error checking
-#define DQDIRNAME   "dquake"
+#define DQDIRNAME   "pdr"
 
 #define	GAMENAME	"pdr"
 

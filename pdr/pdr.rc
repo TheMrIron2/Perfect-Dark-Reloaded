@@ -1,0 +1,5 @@
+// config
+exec config.cfg
+
+// just throw us into a map
+map fe

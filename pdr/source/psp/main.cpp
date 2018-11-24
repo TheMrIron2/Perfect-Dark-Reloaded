@@ -229,7 +229,7 @@ void StartUpParams(char **args, int argc, char *cmdlinePath, char *currentDirect
  				res = sceIoDread(dir_fd, p_dir_de);
  				if ((res > 0) && (p_dir_de->d_stat.st_attr & FIO_SO_IFDIR)) {
  					if (!(stricmp(p_dir_de->d_name, ".") == 0 || stricmp(p_dir_de->d_name, "..") == 0 ||
- 					      stricmp(p_dir_de->d_name, "mp3") == 0 || stricmp(p_dir_de->d_name, "id1") == 0)) {
+ 					      stricmp(p_dir_de->d_name, "mp3") == 0 || stricmp(p_dir_de->d_name, "pdr") == 0)) {
  						dirs[j++] = strdup( p_dir_de->d_name);
  					}
  				}
