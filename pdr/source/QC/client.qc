@@ -38,4 +38,8 @@ void() PutClientInServer = {
 
     self.view_ofs = '0 0 22';
     self.velocity = '0 0 0';
+
+    //temp
+    self.weaponmodel = "models/weapons/falcon2/v_falcon2.mdl";
+    self.weaponframe = 0;
 }

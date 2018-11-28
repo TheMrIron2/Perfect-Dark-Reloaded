@@ -963,9 +963,11 @@ void Sbar_Draw (void)
 
 	scr_copyeverything = 1;
 
-	sb_updates++;
+	//sb_updates++;
 
-	if (sb_lines && vid.width > 320)
+	Draw_String (vid.width - 475, 0, "Perfect Dark: Reloaded ALPHA");
+
+	/*if (sb_lines && vid.width > 320)
 		Draw_TileClear (0, vid.height - sb_lines, vid.width, sb_lines);
 
 	if (sb_lines > 24)
@@ -1071,7 +1073,7 @@ void Sbar_Draw (void)
 	{
 		if (cl.gametype == GAME_DEATHMATCH)
 			Sbar_MiniDeathmatchOverlay ();
-	}
+	}*/
 }
 
 //=============================================================================
