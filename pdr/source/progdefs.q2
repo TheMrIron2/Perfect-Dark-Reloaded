@@ -98,6 +98,7 @@ float frags;
 float weapon;
 string_t weaponmodel;
 float weaponframe;
+float currentmag;
 float currentammo;
 float ammo_shells;
 float ammo_nails;

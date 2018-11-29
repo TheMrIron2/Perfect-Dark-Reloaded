@@ -1,6 +1,11 @@
 ../../progs.dat
 
 defs.qc
+customdefs.qc
 main.qc
+map_entities.qc
+impulses.qc
+weapon_defs.qc
+weapon_core.qc
 client.qc
 dummys.qc

@@ -15,7 +15,7 @@ void() PlayerPreThink = {
 }
 
 void() PlayerPostThink = {
-
+    checkImpulses();
 }
 
 void() PutClientInServer = {
@@ -39,7 +39,9 @@ void() PutClientInServer = {
     self.view_ofs = '0 0 22';
     self.velocity = '0 0 0';
 
-    //temp
-    self.weaponmodel = "models/weapons/falcon2/v_falcon2.mdl";
-    self.weaponframe = 0;
+    //give player weapon
+    self.weapon = W_FALCON2;
+    self.weaponmodel = getWeaponModel(1, self.weapon);
+    self.currentammo = getWeaponReserve(self.weapon);
+    self.currentmag = getWeaponMag(self.weapon);
 }

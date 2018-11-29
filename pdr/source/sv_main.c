@@ -782,6 +782,7 @@ void SV_WriteClientdataToMessage (edict_t *ent, sizebuf_t *msg)
 		MSG_WriteByte (msg, SV_ModelIndex(pr_strings+ent->v.weaponmodel));
 	
 	MSG_WriteShort (msg, ent->v.health);
+	MSG_WriteByte (msg, ent->v.currentmag);
 	MSG_WriteByte (msg, ent->v.currentammo);
 	MSG_WriteByte (msg, ent->v.ammo_shells);
 	MSG_WriteByte (msg, ent->v.ammo_nails);

@@ -25,7 +25,6 @@ void() func_button              = {remove(self);};
 void() func_door                = {remove(self);};
 void() func_door_secret         = {remove(self);};
 void() func_plat                = {remove(self);};
-void() func_wall                = {remove(self);};
 void() info_intermission        = {remove(self);};
 void() info_null                = {remove(self);};
 void() info_teleport_destination= {remove(self);};

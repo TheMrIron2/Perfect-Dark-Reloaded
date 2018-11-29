@@ -196,6 +196,7 @@ string(string s) precache_model2		= #75;	// registered version only
 string(string s) precache_sound2		= #76;	// registered version only
 string(string s) precache_file2			= #77;	// registered version only
 void(entity e) setspawnparms			= #78;	// set parm1... to the
+string(string s1, optional string s2, optional string s3, optional string s4, optional string s5, optional string s6, optional string s7, optional string s8) strcat = #115; /* Part of FRIK_FILE, FTE_STRINGS, ZQ_QC_STRINGS*/
 
 //
 // constants

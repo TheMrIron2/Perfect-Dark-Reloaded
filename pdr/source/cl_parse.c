@@ -890,6 +890,13 @@ void CL_ParseClientdata (int bits)
 	}
 
 	i = MSG_ReadByte ();
+	if (cl.stats[STAT_MAG] != i)
+	{
+		cl.stats[STAT_MAG] = i;
+		Sbar_Changed ();
+	}
+
+	i = MSG_ReadByte ();
 	if (cl.stats[STAT_AMMO] != i)
 	{
 		cl.stats[STAT_AMMO] = i;
