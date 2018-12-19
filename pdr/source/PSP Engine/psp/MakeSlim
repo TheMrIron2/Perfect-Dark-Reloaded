@@ -160,4 +160,4 @@ font.c : font.raw
 
 kx-install: kxploit
 install: EBOOT.PBP
-	mv EBOOT.PBP ../../../
+	mv EBOOT.PBP ../../../../

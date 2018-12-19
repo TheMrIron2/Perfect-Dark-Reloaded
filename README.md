@@ -6,6 +6,7 @@ Perfect Dark Reloaded is a ground-up remake of Perfect Dark in the Quake engine.
 
 - PSP
 - PC
+- PS Vita
 
 ## Features
 
